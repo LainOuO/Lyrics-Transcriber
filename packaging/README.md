@@ -5,6 +5,8 @@
 和市面软件一样：`setup.exe` 安装向导 → 装进 `C:\Program Files\LyricsExtractor\`
 （主 exe + `_internal` 依赖目录）→ 开始菜单/桌面快捷方式 → 控制面板可卸载。
 
+当前版本 **v0.2.0**，支持 mp3 / flac / wav / m4a / mp4 / aac / ogg / opus / wma / ape / aiff。
+
 ## 一键构建
 
 ```bat
@@ -15,7 +17,7 @@ packaging\build_exe.bat
 
 1. **PyInstaller**（onedir 模式）把 Python 程序打包成应用目录 `dist\LyricsExtractor\`；
 2. 找到 **Inno Setup 6** 后，用 `packaging\installer.iss` 把应用目录打成
-   `dist\installer\歌词提取器-安装包-v0.1.0.exe`。
+   `dist\installer\歌词提取器-安装包-v0.2.0.exe`。
 
 没装 Inno Setup 时第 2 步自动跳过，仍可直接运行 `dist\LyricsExtractor\LyricsExtractor.exe` 试用。
 

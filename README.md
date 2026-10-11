@@ -1,13 +1,35 @@
 # 歌词提取器
 
-从 mp3 文件中提取歌词，生成配套的 `.lrc` 文件（与 mp3 同目录、同名，播放器可自动加载）。
+从音频文件中提取歌词，生成配套的 `.lrc` 文件（与音频同目录、同名，播放器可自动加载）。
+
+## 支持的格式
+
+`.mp3` / `.flac` / `.wav` / `.m4a` / `.mp4` / `.aac` / `.ogg` / `.opus` / `.wma` / `.ape` / `.aiff` / `.aif`
+
+各容器的标签体系与歌词字段：
+
+| 格式 | 标签体系 | 歌词字段 |
+| --- | --- | --- |
+| mp3 | ID3 | `SYLT`（同步）> `USLT`（纯文本） |
+| wav / aiff | 容器内嵌 ID3 | `SYLT` > `USLT` |
+| flac / ogg / opus | VorbisComment | `LYRICS` / `UNSYNCEDLYRICS` |
+| m4a / mp4 | MP4 | `©lyr` |
+| wma | ASF | `WM/Lyrics` |
+| ape | APEv2 | `Lyrics` |
+| aac | ADTS 裸流 | 无标签标准，自动走文件名回退 + 在线查询 |
+
+任何格式的内嵌歌词，只要整段本身是 LRC 文本，都会自动还原出时间轴。
 
 ## 歌词来源（按优先级）
 
-1. **内嵌歌词标签**：优先读取 mp3 的 `SYLT`（带时间轴的同步歌词），其次 `USLT`（纯文本歌词；若文本内本身带有 `[mm:ss.xx]` 时间戳，也会解析为同步歌词）。
-2. **在线兜底**：内嵌没有时，按“歌名 + 歌手 + 时长”查询 [lrclib.net](https://lrclib.net) 免费公开歌词接口，优先取带时间轴的版本。
+1. **内嵌歌词标签**：优先读取带时间轴的同步歌词（mp3/wav/aiff 的 `SYLT`），其次纯文本歌词
+   （`USLT`、`LYRICS`、`©lyr`、`WM/Lyrics`、`Lyrics` 等）；若文本内本身带有 `[mm:ss.xx]`
+   时间戳，也会解析为同步歌词。
+2. **在线兜底**：内嵌没有时，按“歌名 + 歌手 + 时长”查询 [lrclib.net](https://lrclib.net)
+   免费公开歌词接口，优先取带时间轴的版本。
 3. **失败清单**：两者都拿不到的文件记入失败清单，可在界面上导出为 txt。
 
+标题缺失时，按 `歌手 - 标题.<扩展名>` 的文件名习惯回退解析出标题/歌手再查在线。
 拿不到时间轴时降级输出纯文本行（无时间戳的 LRC），并在日志中标记。
 
 ## 使用
@@ -31,7 +53,8 @@ python -m pytest
 
 ```
 lyrics_extractor/     源码包
-  id3_reader.py       mutagen 读取 ID3 标签与内嵌歌词
+  audio_file.py       统一音频标签与内嵌歌词读取层（各容器适配）
+  id3_reader.py       ID3 标签与 SYLT/USLT 内嵌歌词解析（mp3/wav/aiff 共用）
   lrc_writer.py       LRC 内容生成与文件写入
   online.py           lrclib.net 在线歌词客户端
   extractor.py        单文件处理流水线（内嵌 → 在线 → 写入）
