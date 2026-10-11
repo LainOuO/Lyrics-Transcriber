@@ -1,4 +1,8 @@
-"""用 mutagen 读取 mp3 的 ID3 标签与内嵌歌词（SYLT 同步歌词 / USLT 非同步歌词）。"""
+"""用 mutagen 读取 ID3 标签与内嵌歌词（SYLT 同步歌词 / USLT 非同步歌词）。
+
+mp3 直接使用本模块；wav / aiff 等容器内嵌的 ID3 也复用同一套逻辑
+（见 :mod:`lyrics_extractor.audio_file`）。
+"""
 
 from __future__ import annotations
 
@@ -35,12 +39,23 @@ def _first_text(mp3_tags, frame_id: str) -> str:
     return str(frames[0].text[0])
 
 
+def id3_title_artist_album(id3_tags) -> tuple[str, str, str]:
+    """从 ID3 标签对象读取 (标题, 歌手, 专辑)，缺失时为空串。
+
+    供 mp3 及内嵌 ID3 的容器（wav / aiff）复用。
+    """
+    if id3_tags is None:
+        return ("", "", "")
+    return (
+        _first_text(id3_tags, "TIT2"),
+        _first_text(id3_tags, "TPE1"),
+        _first_text(id3_tags, "TALB"),
+    )
+
+
 def read_tags(mp3: MP3) -> TrackTags:
     tags = TrackTags()
-    if mp3.tags is not None:
-        tags.title = _first_text(mp3.tags, "TIT2")
-        tags.artist = _first_text(mp3.tags, "TPE1")
-        tags.album = _first_text(mp3.tags, "TALB")
+    tags.title, tags.artist, tags.album = id3_title_artist_album(mp3.tags)
     tags.duration_seconds = float(mp3.info.length) if mp3.info else 0.0
     return tags
 

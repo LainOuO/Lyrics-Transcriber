@@ -1,4 +1,8 @@
-"""单文件处理流水线：读内嵌歌词 → 在线兜底 → 写 LRC。"""
+"""单文件处理流水线：读内嵌歌词 → 在线兜底 → 写 LRC。
+
+格式无关：通过 :mod:`lyrics_extractor.audio_file` 统一读取标签与内嵌歌词，
+支持 mp3 / flac / wav / m4a / mp4 / aac / ogg / opus / wma / ape / aiff。
+"""
 
 from __future__ import annotations
 
@@ -6,7 +10,7 @@ import enum
 from dataclasses import dataclass
 from pathlib import Path
 
-from lyrics_extractor import id3_reader, lrc_writer, online
+from lyrics_extractor import audio_file, lrc_writer, online
 
 
 class Status(enum.Enum):
@@ -20,10 +24,15 @@ class Status(enum.Enum):
 
 @dataclass
 class ExtractResult:
-    mp3_path: Path
+    path: Path
     status: Status
-    source: str = ""  # 内嵌SYLT / 内嵌USLT / lrclib
+    source: str = ""  # 内嵌SYLT / 内嵌USLT / 内嵌LYRICS / 内嵌MP4 / lrclib ...
     message: str = ""
+
+    @property
+    def mp3_path(self) -> Path:
+        """兼容旧字段名（历史遗留，等价于 path）。"""
+        return self.path
 
     @property
     def ok(self) -> bool:
@@ -47,14 +56,14 @@ class LyricsExtractor:
         if lrc_path.exists() and not self.overwrite:
             return ExtractResult(path, Status.SKIPPED)
         try:
-            mp3 = id3_reader.load_mp3(path)
-        except Exception as exc:
-            return ExtractResult(path, Status.ERROR, message=f"无法解析 mp3: {exc}")
+            audio = audio_file.load_audio(path)
+        except audio_file.AudioError as exc:
+            return ExtractResult(path, Status.ERROR, message=str(exc))
 
-        tags = id3_reader.read_tags(mp3)
+        tags = audio.tags
         title, artist = self._display_tags(path, tags)
 
-        embedded = id3_reader.read_embedded_lyrics(mp3.tags)
+        embedded = audio.embedded
         if embedded is not None:
             return self._write(
                 path, tags, title, artist, embedded.lines, embedded.synced,
@@ -103,7 +112,7 @@ class LyricsExtractor:
 
     @staticmethod
     def _display_tags(path: Path, tags) -> tuple[str, str]:
-        """标题为空时回退：按 "歌手 - 标题.mp3" 的命名习惯从文件名补齐。"""
+        """标题为空时回退：按 "歌手 - 标题.<扩展名>" 的命名习惯从文件名补齐。"""
         title, artist = tags.title, tags.artist
         if not title:
             stem = path.stem
