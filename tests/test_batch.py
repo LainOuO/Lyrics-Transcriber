@@ -1,6 +1,12 @@
 import threading
 
-from lyrics_extractor.batch import export_failure_report, run_batch, scan_mp3s
+from lyrics_extractor.audio_file import SUPPORTED_EXTENSIONS
+from lyrics_extractor.batch import (
+    export_failure_report,
+    run_batch,
+    scan_audio_files,
+    scan_mp3s,
+)
 
 
 def make_folder(tmp_path, mp3_factory, n_bare=1):
@@ -97,3 +103,59 @@ def test_export_failure_report(tmp_path, mp3_factory):
     text = out.read_text(encoding="utf-8-sig")
     assert "bare" in text
     assert "未找到歌词" in text
+
+
+# ----------------------------------------------------------------------
+# 扩展名集合扫描
+
+
+def test_scan_audio_files_covers_every_supported_extension(tmp_path):
+    for ext in sorted(SUPPORTED_EXTENSIONS):
+        (tmp_path / f"song{ext}").write_bytes(b"\x00")
+    (tmp_path / "note.txt").write_bytes(b"\x00")
+    (tmp_path / "cover.jpg").write_bytes(b"\x00")
+
+    found = scan_audio_files(tmp_path)
+    assert len(found) == len(SUPPORTED_EXTENSIONS)
+    assert {p.suffix.lower() for p in found} == set(SUPPORTED_EXTENSIONS)
+    assert all(p.suffix.lower() in SUPPORTED_EXTENSIONS for p in found)
+
+
+def test_scan_audio_files_is_case_insensitive(tmp_path):
+    (tmp_path / "A.MP3").write_bytes(b"\x00")
+    (tmp_path / "b.FlAc").write_bytes(b"\x00")
+    (tmp_path / "c.Ogg").write_bytes(b"\x00")
+    (tmp_path / "d.txt").write_bytes(b"\x00")
+
+    assert {p.name for p in scan_audio_files(tmp_path)} == {"A.MP3", "b.FlAc", "c.Ogg"}
+
+
+def test_scan_audio_files_recursive_switch(tmp_path):
+    (tmp_path / "top.flac").write_bytes(b"\x00")
+    sub = tmp_path / "子目录"
+    sub.mkdir()
+    (sub / "deep.wav").write_bytes(b"\x00")
+
+    assert len(scan_audio_files(tmp_path, recursive=True)) == 2
+    assert len(scan_audio_files(tmp_path, recursive=False)) == 1
+
+
+def test_scan_audio_files_missing_folder_returns_empty(tmp_path):
+    assert scan_audio_files(tmp_path / "不存在") == []
+
+
+def test_scan_mp3s_is_backwards_compatible_alias():
+    assert scan_mp3s is scan_audio_files
+
+
+def test_run_batch_processes_mixed_formats(tmp_path, mp3_factory, flac_factory, wav_factory):
+    mp3_factory(name="a.mp3", title="甲", sylt=[("A", 1000)])
+    flac_factory(name="b.flac", title="乙", lyrics="[00:01.00]B\n[00:02.00]C")
+    wav_factory(name="c.wav", title="丙", uslt="行1\n行2")
+
+    summary = run_batch(tmp_path, use_online=False)
+    assert summary.total == 3
+    assert summary.synced == 2
+    assert summary.plain == 1
+    assert summary.errors == 0
+    assert len(list(tmp_path.glob("*.lrc"))) == 3
