@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
 import requests
@@ -13,6 +14,12 @@ USER_AGENT = f"LyricsExtractor/{__version__} (personal lyrics tool)"
 DEFAULT_TIMEOUT = 10.0
 # 搜索结果与本地文件时长的容差（秒），用于排除 Live/Remix 等错误版本
 DURATION_TOLERANCE = 3.0
+# lrclib 高峰期会返回 503（ServerOverloaded: "The server is busy, please retry in a
+# moment"），纯属瞬时故障；429 与其余 5xx 同理。这类响应重试几次即可，不该直接
+# 判定为「处理失败」。
+RETRY_ATTEMPTS = 3  # 单个请求的总尝试次数（含首次）
+RETRY_BACKOFF = 0.8  # 首次退避秒数，之后按 2 倍递增
+RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
 class OnlineError(Exception):
@@ -26,24 +33,49 @@ class OnlineLyrics:
     instrumental: bool = False
 
 
+def _server_hint(resp) -> str:
+    """尽量摘出服务端给出的原因（如 503 的 "The server is busy..."），取不到就留空。"""
+    try:
+        data = resp.json()
+    except ValueError:
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    hint = data.get("message") or data.get("name")
+    return f"（{hint}）" if hint else ""
+
+
 def _get(path: str, params: dict, timeout: float):
-    try:
-        resp = requests.get(
-            f"{LRCLIB_BASE}/{path}",
-            params=params,
-            timeout=timeout,
-            headers={"User-Agent": USER_AGENT},
-        )
-    except requests.RequestException as exc:
-        raise OnlineError(f"网络请求失败: {exc}") from exc
-    if resp.status_code == 404:
-        return None
-    if resp.status_code >= 400:
-        raise OnlineError(f"lrclib 返回 {resp.status_code}")
-    try:
-        return resp.json()
-    except ValueError as exc:
-        raise OnlineError("lrclib 返回了无法解析的内容") from exc
+    """请求 lrclib；对瞬时故障（网络异常 / 429 / 5xx）退避重试后再判定失败。"""
+    url = f"{LRCLIB_BASE}/{path}"
+    failure: OnlineError | None = None
+    for attempt in range(1, RETRY_ATTEMPTS + 1):
+        if attempt > 1:
+            time.sleep(RETRY_BACKOFF * 2 ** (attempt - 2))
+        try:
+            resp = requests.get(
+                url,
+                params=params,
+                timeout=timeout,
+                headers={"User-Agent": USER_AGENT},
+            )
+        except requests.RequestException as exc:
+            failure = OnlineError(f"网络请求失败: {exc}")
+            continue
+        if resp.status_code == 404:
+            return None
+        if resp.status_code in RETRYABLE_STATUS:
+            failure = OnlineError(f"lrclib 返回 {resp.status_code}{_server_hint(resp)}")
+            continue
+        if resp.status_code >= 400:
+            # 其余 4xx 多为请求本身有问题，重试没有意义
+            raise OnlineError(f"lrclib 返回 {resp.status_code}{_server_hint(resp)}")
+        try:
+            return resp.json()
+        except ValueError as exc:
+            raise OnlineError("lrclib 返回了无法解析的内容") from exc
+
+    raise OnlineError(f"{failure}（已重试 {RETRY_ATTEMPTS} 次）") from failure
 
 
 def fetch_lyrics(
