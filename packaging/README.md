@@ -24,6 +24,9 @@ packaging\build_exe.bat
 ## 依赖
 
 - Python + `requirements.txt`（含 pyinstaller）
+- `pykakasi` 自带约 10MB 的词典数据（`pykakasi/data/*.db`），官方没有 PyInstaller 钩子，
+  因此 `lyrics_extractor.spec` 里显式做了 `collect_data_files("pykakasi")`；
+  **没装 pykakasi 时 spec 会自动跳过这一项，不影响打包**（只是打包出来的程序少了罗马字兜底查询）。
 - [Inno Setup 6](https://jrsoftware.org/isinfo.php)（只生成安装包时需要，装在任意位置均可，
   脚本会自动查找系统/用户安装目录）。
   简体中文安装界面所需的 `ChineseSimplified.isl` 已随仓库附带在 `packaging/` 下，

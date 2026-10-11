@@ -85,7 +85,7 @@ def fetch_lyrics(
     duration: float | None = None,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> OnlineLyrics | None:
-    """先精确匹配 /get，失败再走 /search 模糊匹配；都没有则返回 None。"""
+    """先精确匹配 /get，失败再按多轮模糊查询；都没有则返回 None。"""
     params = {"track_name": title, "artist_name": artist}
     if album:
         params["album_name"] = album
@@ -95,33 +95,120 @@ def fetch_lyrics(
     if exact:
         return _to_lyrics(exact)
 
-    query = f"{artist} {title}".strip()
-    results = _get("search", {"q": query}, timeout)
-    if results:
-        best = _pick_best(results, title, duration)
+    for query, aliases, require_duration in _search_rounds(title, artist, duration):
+        results = _get("search", {"q": query}, timeout)
+        if not results:
+            continue
+        best = _pick_best(
+            results, title, duration, aliases=aliases, require_duration=require_duration
+        )
         if best is not None:
             return _to_lyrics(best)
     return None
+
+
+def _search_rounds(title: str, artist: str, duration: float | None) -> list[tuple]:
+    """多轮模糊查询的候选词，按「越精确越先试」排序，返回 (查询词, 别名, 是否强制时长)。
+
+    第一轮「歌手 + 歌名」最精确；日文曲目在 lrclib 上常常只有罗马字条目
+    （「ひとひら」→「Hitohira」），汉字/假名歌名查不到时，仅歌名、罗马字歌名
+    这两轮往往能兜住。
+
+    后两轮丢掉了歌手这个锚点，因此强制要求时长落在容差内；本地时长未知时直接
+    不做这两轮——宁可查不到，也不要把别人的歌词写到文件里。
+    """
+    rounds: list[tuple] = []
+    seen: set[str] = set()
+
+    def add(query: str, aliases: tuple = (), require_duration: bool = False):
+        query = query.strip()
+        key = _norm(query)
+        if query and key not in seen:
+            seen.add(key)
+            rounds.append((query, aliases, require_duration))
+
+    add(f"{artist} {title}".strip())
+    if duration and not title.isascii():
+        # 非 ASCII 歌名才需要这两轮；纯英文歌名第一轮已经够用，省一次请求
+        add(title, require_duration=True)
+        romanized = _romanize(title)
+        if romanized:
+            add(romanized, aliases=(romanized,), require_duration=True)
+    return rounds
+
+
+_ROMANIZER: object | None = None
+_ROMANIZER_MISSING = False
+
+
+def _romanize(text: str) -> str | None:
+    """把日文假名/汉字转成罗马字，供查询用；没装 pykakasi 时返回 None（跳过该轮）。
+
+    汉字读音依赖 pykakasi 的词典，人名等专有名词可能读错（如「秦基博」→
+    "shinmotohiro"）；但这一轮只用来"多试一个关键词"，最终仍由歌名 + 时长容差
+    把关，读错最多是多一次无结果的请求。
+    """
+    global _ROMANIZER, _ROMANIZER_MISSING
+    if _ROMANIZER_MISSING:
+        return None
+    if _ROMANIZER is None:
+        try:
+            import pykakasi
+
+            _ROMANIZER = pykakasi.kakasi()
+        except Exception:
+            # 没装 pykakasi（或打包时漏带了它的词典数据）就安静跳过这一轮：
+            # 罗马字兜底只是锦上添花，不该拖垮整个查询。
+            _ROMANIZER_MISSING = True
+            return None
+    try:
+        converted = "".join(item["hepburn"] for item in _ROMANIZER.convert(text))
+    except Exception:
+        return None
+    converted = " ".join(converted.split())
+    return converted if converted and _norm(converted) != _norm(text) else None
 
 
 def _norm(text: str) -> str:
     return " ".join(str(text).casefold().split())
 
 
-def _pick_best(results: list, title: str, duration: float | None) -> dict | None:
-    """要求标题至少能对上，优先同步歌词、歌手匹配、时长接近的结果。"""
-    target = _norm(title)
-    exact = [r for r in results if _norm(r.get("trackName", "")) == target]
+def _within_tolerance(item: dict, duration: float | None) -> bool:
+    """结果自带时长且与本地时长相差不超过容差；本地时长未知或结果无时长都不算数。"""
+    if not duration or not item.get("duration"):
+        return False
+    return abs(float(item["duration"]) - duration) <= DURATION_TOLERANCE
+
+
+def _pick_best(
+    results: list,
+    title: str,
+    duration: float | None,
+    *,
+    aliases: tuple = (),
+    require_duration: bool = False,
+) -> dict | None:
+    """要求标题至少能对上，优先同步歌词、时长接近的结果。
+
+    ``require_duration=True`` 用于丢了歌手锚点的那几轮：标题对上还不够，时长也必须
+    落在容差内，才敢认领。
+    """
+    targets = {_norm(t) for t in (title, *aliases) if _norm(t)}
+    exact = [r for r in results if _norm(r.get("trackName", "")) in targets]
+    if require_duration:
+        exact = [r for r in exact if _within_tolerance(r, duration)]
     candidates = exact
     if not candidates and duration:
         # 标题不完全一致时，要求时长在容差内才敢认领，避免拿到错误版本
         candidates = [
             r
             for r in results
-            if r.get("duration")
-            and abs(float(r["duration"]) - duration) <= DURATION_TOLERANCE
-            and (target in _norm(r.get("trackName", ""))
-                 or _norm(r.get("trackName", "")) in target)
+            if _within_tolerance(r, duration)
+            and any(
+                target in _norm(r.get("trackName", ""))
+                or _norm(r.get("trackName", "")) in target
+                for target in targets
+            )
         ]
     if not candidates:
         return None
@@ -129,9 +216,7 @@ def _pick_best(results: list, title: str, duration: float | None) -> dict | None
     def score(r: dict) -> tuple:
         has_synced = bool(r.get("syncedLyrics"))
         artist_hit = 1 if r.get("artistName") else 0
-        near = 0
-        if duration and r.get("duration"):
-            near = 1 if abs(float(r["duration"]) - duration) <= DURATION_TOLERANCE else 0
+        near = 1 if _within_tolerance(r, duration) else 0
         return (has_synced, artist_hit, near, float(r.get("duration") or 0))
 
     return max(candidates, key=score)

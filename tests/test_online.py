@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 import requests
 
@@ -330,3 +332,123 @@ def test_bad_json_is_not_retried(queued_api):
     with pytest.raises(OnlineError):
         fetch_lyrics("晴天", "周杰伦")
     assert len(calls) == 1
+
+
+# ----------------------------------------------------------------------
+# 多轮模糊查询（仅歌名 / 罗马字歌名）
+
+# 日文曲目：lrclib 上只有罗马字条目，原字形查不到
+HITOHIRA = {
+    "trackName": "Hitohira",
+    "artistName": "Hata Motohiro",
+    "duration": 235.0,
+    "instrumental": False,
+    "plainLyrics": "ひとひら の うた",
+    "syncedLyrics": "[00:01.00]ひとひら の うた",
+}
+# 同名同字形、时长也对得上：仅歌名那一轮可以认领
+SAME_TITLE_OK = dict(HITOHIRA, trackName="ひとひら", artistName="別の人")
+# 同名但时长对不上（Live/另一首同名曲），绝不该被认领
+WRONG_HITOHIRA = {
+    "trackName": "ひとひら",
+    "artistName": "ポルノグラフィティ",
+    "duration": 404.0,
+    "instrumental": False,
+    "plainLyrics": "别人的歌词",
+    "syncedLyrics": "[00:01.00]别人的歌词",
+}
+
+
+def searched(calls) -> list[str]:
+    return [c["params"]["q"] for c in calls if c["path"] == "search"]
+
+
+@pytest.fixture
+def no_romanize(monkeypatch):
+    """关掉罗马字那一轮，便于单独断言前两轮的查询词。"""
+    monkeypatch.setattr(online, "_romanize", lambda text: None)
+
+
+def test_title_only_round_requires_duration_match(queued_api, no_romanize):
+    """丢掉歌手锚点后，仅歌名这一轮必须时长对得上，否则宁可放弃。"""
+    calls, push = queued_api
+    push("get", FakeResp(404))
+    push("search", FakeResp(200, []), FakeResp(200, [WRONG_HITOHIRA]))
+    assert fetch_lyrics("ひとひら", "秦基博", duration=235.75) is None
+    assert searched(calls) == ["秦基博 ひとひら", "ひとひら"]
+
+
+def test_title_only_round_accepts_duration_match(queued_api, no_romanize):
+    calls, push = queued_api
+    push("get", FakeResp(404))
+    push("search", FakeResp(200, []), FakeResp(200, [WRONG_HITOHIRA, SAME_TITLE_OK]))
+    result = fetch_lyrics("ひとひら", "秦基博", duration=235.75)
+    assert result.synced_text == "[00:01.00]ひとひら の うた"
+    assert searched(calls) == ["秦基博 ひとひら", "ひとひら"]
+
+
+def test_romanized_round_finds_kanji_title(queued_api, monkeypatch):
+    """前两轮都空时，用罗马字歌名再查一轮（lrclib 上的日文曲目常是罗马字条目）。"""
+    monkeypatch.setattr(online, "_romanize", lambda text: "hitohira")
+    calls, push = queued_api
+    push("get", FakeResp(404))
+    push("search", FakeResp(200, []), FakeResp(200, []), FakeResp(200, [HITOHIRA]))
+    result = fetch_lyrics("ひとひら", "秦基博", duration=235.75)
+    assert result.synced_text == "[00:01.00]ひとひら の うた"
+    assert searched(calls) == ["秦基博 ひとひら", "ひとひら", "hitohira"]
+
+
+def test_romanized_round_ignores_unrelated_same_title(queued_api, monkeypatch):
+    monkeypatch.setattr(online, "_romanize", lambda text: "hitohira")
+    _, push = queued_api
+    push("get", FakeResp(404))
+    push("search", FakeResp(200, []), FakeResp(200, []), FakeResp(200, [WRONG_HITOHIRA]))
+    assert fetch_lyrics("ひとひら", "秦基博", duration=235.75) is None
+
+
+def test_ascii_title_skips_extra_rounds(queued_api):
+    """纯英文歌名第一轮就够用，不必多打两次请求。"""
+    calls, push = queued_api
+    push("get", FakeResp(404))
+    push("search", FakeResp(200, []))
+    assert fetch_lyrics("Lemon", "米津玄師", duration=255.0) is None
+    assert len(calls) == 2
+
+
+def test_missing_duration_skips_extra_rounds(queued_api):
+    """本地时长未知时无法把关，不做仅歌名/罗马字这两轮。"""
+    calls, push = queued_api
+    push("get", FakeResp(404))
+    push("search", FakeResp(200, []))
+    assert fetch_lyrics("ひとひら", "秦基博") is None
+    assert len(calls) == 2
+
+
+def test_search_rounds_are_deduplicated(no_romanize):
+    """歌手为空时第一轮查询词就等于歌名，不该重复问同一个问题。"""
+    rounds = online._search_rounds("晴天", "", 269.3)
+    assert [r[0] for r in rounds] == ["晴天"]
+
+
+def test_search_rounds_include_romanized_title():
+    """装了 pykakasi 时，非 ASCII 歌名会多出一轮罗马字查询（需要时长才能把关）。"""
+    rounds = online._search_rounds("ひとひら", "秦基博", 235.75)
+    assert [r[0] for r in rounds] == ["秦基博 ひとひら", "ひとひら", "hitohira"]
+    assert [r[2] for r in rounds] == [False, True, True]
+
+
+def test_romanize_without_pykakasi_returns_none(monkeypatch):
+    monkeypatch.setitem(sys.modules, "pykakasi", None)  # 让 import pykakasi 抛 ImportError
+    monkeypatch.setattr(online, "_ROMANIZER", None)
+    monkeypatch.setattr(online, "_ROMANIZER_MISSING", False)
+    assert online._romanize("ひとひら") is None
+    assert online._ROMANIZER_MISSING is True
+
+
+def test_romanize_uses_pykakasi_when_available(monkeypatch):
+    pytest.importorskip("pykakasi")
+    monkeypatch.setattr(online, "_ROMANIZER", None)
+    monkeypatch.setattr(online, "_ROMANIZER_MISSING", False)
+    assert online._romanize("ひとひら") == "hitohira"
+    # 已经是罗马字的歌名不该再"转换"出个不同的东西
+    assert online._romanize("Lemon") is None
