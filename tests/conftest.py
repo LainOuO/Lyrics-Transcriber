@@ -1,5 +1,7 @@
 """测试公共夹具：用最小合法 MPEG 帧构造可被 mutagen 解析的 mp3。"""
 
+from pathlib import Path
+
 import pytest
 from mutagen.id3 import ID3, SYLT, TALB, TIT2, TPE1, USLT
 
@@ -19,6 +21,7 @@ def mp3_factory(tmp_path):
     def _make(
         name: str = "song.mp3",
         *,
+        dirpath=None,
         title: str | None = None,
         artist: str | None = None,
         album: str | None = None,
@@ -28,7 +31,8 @@ def mp3_factory(tmp_path):
         raw: bytes | None = None,
     ):
         counter["i"] += 1
-        path = tmp_path / f"{counter['i']:03d}-{name}"
+        base = Path(dirpath) if dirpath is not None else tmp_path
+        path = base / f"{counter['i']:03d}-{name}"
         path.write_bytes(raw if raw is not None else make_mp3_bytes())
         if title or artist or album or uslt is not None or sylt is not None:
             tags = ID3()
