@@ -6,3 +6,7 @@ dist/
 *.egg-info/
 .venv/
 .workbuddy-ai/
+
+# 运行期产物：GUI 导出的失败清单等，非源码
+失败日志/
+失败清单.txt
