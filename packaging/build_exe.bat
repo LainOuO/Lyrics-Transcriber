@@ -19,7 +19,7 @@ if not exist "%ISCC%" (
 "%ISCC%" packaging\installer.iss || goto :err
 echo.
 echo 完成！应用目录：dist\LyricsExtractor\
-echo        安装包：dist\installer\歌词提取器-安装包-v0.1.0.exe
+echo        安装包：dist\installer\歌词提取器-安装包-v0.2.0.exe
 exit /b 0
 
 :err
