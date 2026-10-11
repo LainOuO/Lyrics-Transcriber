@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
+from lyrics_extractor.lrc_writer import parse_lrc_text
 from mutagen.mp3 import MP3
 
 
@@ -22,10 +22,6 @@ class EmbeddedLyrics:
     synced: bool
     # synced 时为 [(毫秒, 文本), ...]，plain 时为 [文本, ...]
     lines: list
-
-
-# 行首 LRC 时间戳 [mm:ss]、[mm:ss.xx]、[mm:ss.xxx]，允许一行多个
-_LRC_STAMP = re.compile(r"\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]")
 
 
 def load_mp3(path) -> MP3:
@@ -90,39 +86,8 @@ def _parse_uslt(frame) -> EmbeddedLyrics | None:
     text = frame.text or ""
     if not text.strip():
         return None
-    parsed = _parse_lrc_text(text)
+    parsed = parse_lrc_text(text)
     if parsed is not None:
         return EmbeddedLyrics(source="USLT", synced=True, lines=parsed)
     plain = [line.strip() for line in text.splitlines() if line.strip()]
     return EmbeddedLyrics(source="USLT", synced=False, lines=plain)
-
-
-def _parse_lrc_text(text: str) -> list | None:
-    """若文本中过半的非空行带时间戳（且至少两行），解析为 (毫秒, 文本) 列表；否则 None。
-
-    有些 USLT 虽标记为纯文本，内容其实是整段 LRC，这里把它还原成同步歌词。
-    """
-    non_empty = [line.strip() for line in text.splitlines() if line.strip()]
-    if not non_empty:
-        return None
-    stamped = 0
-    lines: list[tuple[int, str]] = []
-    for line in non_empty:
-        stamps = []
-        pos = 0
-        while (m := _LRC_STAMP.match(line, pos)) is not None:
-            stamps.append(m)
-            pos = m.end()
-        if not stamps:
-            continue
-        stamped += 1
-        body = line[pos:].strip()
-        for m in stamps:
-            frac = m.group(3) or ""
-            frac_ms = int(frac) * 10 ** (3 - len(frac)) if frac else 0
-            ms = int(m.group(1)) * 60000 + int(m.group(2)) * 1000 + frac_ms
-            lines.append((ms, body))
-    if stamped >= 2 and stamped * 2 >= len(non_empty):
-        lines.sort(key=lambda x: x[0])
-        return lines
-    return None

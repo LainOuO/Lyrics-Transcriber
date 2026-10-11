@@ -1,5 +1,19 @@
 from lyrics_extractor import lrc_writer
-from lyrics_extractor.lrc_writer import build_lrc, format_timestamp
+from lyrics_extractor.lrc_writer import build_lrc, format_timestamp, parse_lrc_text
+
+
+def test_parse_lrc_text_synced():
+    lines = parse_lrc_text("[00:01.00]A\n[00:02.50]B\n[01:02]C")
+    assert lines == [(1000, "A"), (2500, "B"), (62000, "C")]
+
+
+def test_parse_lrc_text_plain_returns_none():
+    assert parse_lrc_text("第一行\n第二行") is None
+
+
+def test_parse_lrc_text_empty_returns_none():
+    assert parse_lrc_text("") is None
+    assert parse_lrc_text("\n  \n") is None
 
 
 def test_format_timestamp_basics():
