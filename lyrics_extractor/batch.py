@@ -23,6 +23,16 @@ def scan_audio_files(folder, recursive: bool = True) -> list[Path]:
     )
 
 
+def is_supported_audio(path) -> bool:
+    """该路径是否是一个受支持的音频文件（存在、是文件、扩展名在支持集合内）。
+
+    界面选「单个文件」时用它把关：选到 .txt 或没有扩展名的文件应当直接拦下，
+    而不是静默跳过。
+    """
+    path = Path(path)
+    return path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
+
+
 # 兼容旧名（历史上只支持 mp3）；新代码请用 scan_audio_files
 scan_mp3s = scan_audio_files
 
@@ -44,24 +54,26 @@ class RunSummary:
         return self.synced + self.plain
 
 
-def run_batch(
-    folder,
+def run_files(
+    files,
     *,
     overwrite: bool = False,
-    recursive: bool = True,
     use_online: bool = True,
     stop_event: threading.Event | None = None,
     progress_cb=None,
     log_cb=None,
     timeout: float | None = None,
 ) -> RunSummary:
-    """遍历文件夹逐个处理；通过回调向界面汇报进度与日志，stop_event 置位时提前停止。"""
+    """逐个处理给定的一批文件（界面的「单个文件」模式就是只传一个）。
+
+    只认传进来的这份列表，不做扩展名过滤也不做排序——过滤交给
+    :func:`scan_audio_files` / :func:`is_supported_audio`，调用方先筛好再进来。
+    """
     log = log_cb or (lambda msg: None)
     progress = progress_cb or (lambda done, total, result=None: None)
-    files = scan_audio_files(folder, recursive=recursive)
+    files = [Path(path) for path in files]
     summary = RunSummary(total=len(files))
     if not files:
-        log("该文件夹下没有找到支持的音频文件")
         return summary
 
     kwargs = {"overwrite": overwrite, "use_online": use_online}
@@ -93,6 +105,34 @@ def run_batch(
         progress(index, summary.total, result)
 
     return summary
+
+
+def run_batch(
+    folder,
+    *,
+    overwrite: bool = False,
+    recursive: bool = True,
+    use_online: bool = True,
+    stop_event: threading.Event | None = None,
+    progress_cb=None,
+    log_cb=None,
+    timeout: float | None = None,
+) -> RunSummary:
+    """扫描文件夹后逐个处理；通过回调向界面汇报进度与日志，stop_event 置位时提前停止。"""
+    log = log_cb or (lambda msg: None)
+    files = scan_audio_files(folder, recursive=recursive)
+    if not files:
+        log("该文件夹下没有找到支持的音频文件")
+        return RunSummary(total=0)
+    return run_files(
+        files,
+        overwrite=overwrite,
+        use_online=use_online,
+        stop_event=stop_event,
+        progress_cb=progress_cb,
+        log_cb=log_cb,
+        timeout=timeout,
+    )
 
 
 def export_failure_report(summary: RunSummary, out_path) -> Path:

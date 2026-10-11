@@ -5,17 +5,31 @@ tkinter = pytest.importorskip("tkinter")
 from lyrics_extractor import batch
 from lyrics_extractor.batch import RunSummary
 from lyrics_extractor.extractor import Status
-from lyrics_extractor.gui import App
+from lyrics_extractor.gui import MODE_FILE, MODE_FOLDER, App
+
+
+@pytest.fixture(scope="module")
+def tk_root():
+    """整个模块共用一个 Tk 根窗口。
+
+    同一进程里反复 `Tk()` / `destroy()` 会让 Tcl 偶发读不到自己的 ttk 脚本
+    （`couldn't read file .../ttk/fonts.tcl`），测试多起来就会随机 skip 一个。
+    共用一个根窗口、每次只重建界面，可以彻底避开这个坑。
+    """
+    try:
+        root = tkinter.Tk()
+    except Exception as exc:  # 无显示环境时跳过
+        pytest.skip(f"无法创建 Tk 窗口: {exc!r}")
+    root.withdraw()  # 冒烟测试不真正弹窗
+    yield root
+    root.destroy()
 
 
 @pytest.fixture
-def app(monkeypatch):
-    try:
-        root = tkinter.Tk()
-    except Exception:  # 无显示环境时跳过
-        pytest.skip("无法创建 Tk 窗口")
-    root.withdraw()  # 冒烟测试不真正弹窗
-    gui = App(root)
+def app(tk_root, monkeypatch):
+    for child in list(tk_root.winfo_children()):
+        child.destroy()  # 上一个用例留下的界面
+    gui = App(tk_root)
     # 弹窗一律替换为记录，避免模态对话框阻塞测试
     dialogs = []
     monkeypatch.setattr(
@@ -31,9 +45,9 @@ def app(monkeypatch):
         lambda *a, **k: dialogs.append(("info", a)),
     )
     gui._dialogs = dialogs
-    root.update()
+    tk_root.update()
     yield gui
-    root.destroy()
+    gui.stop_event.set()  # 别让残留的工作线程继续跑
 
 
 def test_window_builds_and_defaults(app):
@@ -45,10 +59,192 @@ def test_window_builds_and_defaults(app):
 
 
 def test_start_rejects_missing_folder(app):
-    app.folder_var.set(r"Z:\不存在的目录\不存在")
+    app.path_var.set(r"Z:\不存在的目录\不存在")
     app._start()  # 应记录警告弹窗并直接返回，不启动线程
     assert app.worker is None
     assert app._dialogs == [("warning", ("歌词提取器", "请先选择一个存在的歌曲文件夹"))]
+
+
+# ----------------------------------------------------------------------
+# 单个文件 / 整个文件夹 模式切换
+
+
+def test_default_mode_is_folder(app):
+    assert app.mode_var.get() == MODE_FOLDER
+    assert app.path_label["text"] == "歌曲文件夹："
+    assert str(app.recursive_check["state"]) == "normal"
+
+
+def test_switch_to_file_mode_updates_label_and_disables_recursive(app):
+    app.mode_var.set(MODE_FILE)
+    app._on_mode_change()
+    assert app.path_label["text"] == "音频文件："
+    # 「包含子文件夹」对单个文件没有意义，应置灰
+    assert str(app.recursive_check["state"]) == "disabled"
+
+    app.mode_var.set(MODE_FOLDER)
+    app._on_mode_change()
+    assert app.path_label["text"] == "歌曲文件夹："
+    assert str(app.recursive_check["state"]) == "normal"
+
+
+def test_mode_switch_remembers_each_path(app):
+    app.path_var.set(r"D:\歌单")
+    app.mode_var.set(MODE_FILE)
+    app._on_mode_change()
+    assert app.path_var.get() == ""  # 单文件模式还没选过东西
+
+    app.path_var.set(r"D:\歌单\晴天.mp3")
+    app.mode_var.set(MODE_FOLDER)
+    app._on_mode_change()
+    assert app.path_var.get() == r"D:\歌单"  # 切回去仍是原来那个文件夹
+
+    app.mode_var.set(MODE_FILE)
+    app._on_mode_change()
+    assert app.path_var.get() == r"D:\歌单\晴天.mp3"
+
+
+def test_mode_change_is_noop_for_same_mode(app):
+    app.path_var.set(r"D:\歌单")
+    app._on_mode_change()  # 模式没变，不该把路径清掉
+    assert app.path_var.get() == r"D:\歌单"
+
+
+def test_browse_uses_file_dialog_in_file_mode(app, monkeypatch):
+    chosen = {}
+    monkeypatch.setattr(
+        "lyrics_extractor.gui.filedialog.askopenfilename",
+        lambda **kwargs: chosen.update(kwargs) or r"D:\歌单\晴天.mp3",
+    )
+    monkeypatch.setattr(
+        "lyrics_extractor.gui.filedialog.askdirectory",
+        lambda **kwargs: pytest.fail("单文件模式不该弹目录选择框"),
+    )
+    app.mode_var.set(MODE_FILE)
+    app._on_mode_change()
+    app._browse()
+    assert app.path_var.get() == r"D:\歌单\晴天.mp3"
+    assert "*.mp3" in chosen["filetypes"][0][1]
+
+
+def test_browse_uses_directory_dialog_in_folder_mode(app, monkeypatch):
+    monkeypatch.setattr(
+        "lyrics_extractor.gui.filedialog.askdirectory",
+        lambda **kwargs: r"D:\歌单",
+    )
+    monkeypatch.setattr(
+        "lyrics_extractor.gui.filedialog.askopenfilename",
+        lambda **kwargs: pytest.fail("文件夹模式不该弹文件选择框"),
+    )
+    app._browse()
+    assert app.path_var.get() == r"D:\歌单"
+
+
+def test_start_rejects_missing_file(app):
+    app.mode_var.set(MODE_FILE)
+    app._on_mode_change()
+    app.path_var.set(r"Z:\不存在的歌曲.mp3")
+    app._start()
+    assert app.worker is None
+    assert app._dialogs == [("warning", ("歌词提取器", "请先选择一个存在的音频文件"))]
+
+
+def test_start_rejects_unsupported_file(app, tmp_path):
+    note = tmp_path / "歌单说明.txt"
+    note.write_text("不是音频", encoding="utf-8")
+    app.mode_var.set(MODE_FILE)
+    app._on_mode_change()
+    app.path_var.set(str(note))
+    app._start()
+    assert app.worker is None
+    assert len(app._dialogs) == 1
+    kind, (title, text) = app._dialogs[0]
+    assert kind == "warning"
+    assert title == "歌词提取器"
+    assert "不支持的音频格式" in text
+    assert ".txt" in text
+
+
+def test_start_file_mode_calls_run_files_only(app, tmp_path, monkeypatch):
+    audio = tmp_path / "晴天.mp3"
+    audio.write_bytes(b"\x00")
+    seen = {}
+
+    def fake_run_files(files, **kwargs):
+        seen["files"] = [str(f) for f in files]
+        seen["overwrite"] = kwargs["overwrite"]
+        seen["use_online"] = kwargs["use_online"]
+        seen["has_recursive"] = "recursive" in kwargs
+        return RunSummary(total=1, synced=1)
+
+    monkeypatch.setattr(batch, "run_files", fake_run_files)
+    monkeypatch.setattr(
+        batch, "run_batch", lambda *a, **k: pytest.fail("单文件模式不该走文件夹扫描")
+    )
+    app.mode_var.set(MODE_FILE)
+    app._on_mode_change()
+    app.path_var.set(str(audio))
+    app._start()
+    app.worker.join(timeout=5)
+
+    assert seen["files"] == [str(audio)]
+    assert seen["has_recursive"] is False  # 单文件没有「包含子文件夹」
+    assert seen["use_online"] is True
+    assert app._running_mode == MODE_FILE
+    # 运行中应锁住会改变目标的控件
+    assert str(app.start_btn["state"]) == "disabled"
+    assert str(app.browse_btn["state"]) == "disabled"
+    assert str(app.export_btn["state"]) == "disabled"
+    assert all(str(r["state"]) == "disabled" for r in app.mode_radios)
+
+
+def test_start_folder_mode_calls_run_batch_with_recursive(app, tmp_path, monkeypatch):
+    seen = {}
+
+    def fake_run_batch(folder, **kwargs):
+        seen["folder"] = str(folder)
+        seen["recursive"] = kwargs["recursive"]
+        return RunSummary(total=0)
+
+    monkeypatch.setattr(batch, "run_batch", fake_run_batch)
+    monkeypatch.setattr(
+        batch, "run_files", lambda *a, **k: pytest.fail("文件夹模式不该走 run_files")
+    )
+    app.path_var.set(str(tmp_path))
+    app.recursive_var.set(False)
+    app._start()
+    app.worker.join(timeout=5)
+
+    assert seen == {"folder": str(tmp_path), "recursive": False}
+    assert app._running_mode == MODE_FOLDER
+
+
+def test_stop_releases_controls(app):
+    app._set_running(True)
+    app._stop()
+    assert app.stop_event.is_set()
+    assert str(app.stop_btn["state"]) == "disabled"
+
+
+def test_on_done_releases_controls_and_names_scope(app):
+    app.mode_var.set(MODE_FILE)
+    app._on_mode_change()
+    app._running_mode = MODE_FILE
+    app._set_running(True)
+    app._on_done(RunSummary(total=1, synced=1))
+    assert "单个文件" in app.status_var.get()
+    assert str(app.start_btn["state"]) == "normal"
+    assert str(app.mode_radios[0]["state"]) == "normal"
+    # 单文件模式下「包含子文件夹」仍应保持置灰
+    assert str(app.recursive_check["state"]) == "disabled"
+
+
+def test_on_done_folder_mode_keeps_recursive_enabled(app):
+    app._running_mode = MODE_FOLDER
+    app._set_running(True)
+    app._on_done(RunSummary(total=2, synced=2))
+    assert "文件夹" in app.status_var.get()
+    assert str(app.recursive_check["state"]) == "normal"
 
 
 def test_on_done_updates_summary_line(app):
@@ -73,6 +269,14 @@ def test_on_done_marks_stopped(app):
     assert "已停止" in app.status_var.get()
 
 
+def test_on_failed_releases_controls(app):
+    app._set_running(True)
+    app._on_failed("炸了")
+    assert app.status_var.get() == "运行出错"
+    assert str(app.start_btn["state"]) == "normal"
+    assert str(app.browse_btn["state"]) == "normal"
+
+
 def test_log_view_inserts_lines(app):
     app._log("第一行")
     app._log("第二行")
@@ -87,3 +291,4 @@ def test_summary_line_uses_runsummary_fields():
                   "skipped", "errors", "stopped", "failures"):
         assert hasattr(summary, field)
     assert batch.run_batch is not None
+    assert batch.run_files is not None

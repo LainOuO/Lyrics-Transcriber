@@ -3,7 +3,9 @@ import threading
 from lyrics_extractor.audio_file import SUPPORTED_EXTENSIONS
 from lyrics_extractor.batch import (
     export_failure_report,
+    is_supported_audio,
     run_batch,
+    run_files,
     scan_audio_files,
     scan_mp3s,
 )
@@ -159,3 +161,112 @@ def test_run_batch_processes_mixed_formats(tmp_path, mp3_factory, flac_factory, 
     assert summary.plain == 1
     assert summary.errors == 0
     assert len(list(tmp_path.glob("*.lrc"))) == 3
+
+
+# ----------------------------------------------------------------------
+# 指定文件列表（界面的「单个文件」模式）
+
+
+def test_run_files_processes_only_given_files(tmp_path, mp3_factory):
+    """只处理传进来的文件，同目录下的其它音频不受影响。"""
+    target = mp3_factory(name="target.mp3", title="目标", sylt=[("A", 1000)])
+    other = mp3_factory(name="other.mp3", title="别的", sylt=[("A", 1000)])
+
+    summary = run_files([target], use_online=False)
+    assert summary.total == 1
+    assert summary.synced == 1
+    assert target.with_suffix(".lrc").exists()
+    assert not other.with_suffix(".lrc").exists()
+
+
+def test_run_files_single_file_reports_one_of_one(tmp_path, mp3_factory):
+    target = mp3_factory(name="solo.mp3", title="独", sylt=[("A", 1000)])
+    logs, seen = [], []
+    summary = run_files(
+        [target],
+        use_online=False,
+        log_cb=logs.append,
+        progress_cb=lambda done, total, result=None: seen.append((done, total)),
+    )
+    assert summary.total == 1
+    assert seen == [(1, 1)]
+    assert logs[0].startswith("[1/1] ")
+    assert "solo.mp3" in logs[0]
+
+
+def test_run_files_accepts_str_paths(tmp_path, mp3_factory):
+    target = mp3_factory(name="asstring.mp3", title="串", sylt=[("A", 1000)])
+    summary = run_files([str(target)], use_online=False)
+    assert summary.total == 1
+    assert summary.synced == 1
+    assert summary.failures == []
+
+
+def test_run_files_empty_list(tmp_path):
+    summary = run_files([], use_online=False)
+    assert summary.total == 0
+    assert not summary.stopped
+
+
+def test_run_files_honours_skip_and_overwrite(tmp_path, mp3_factory):
+    target = mp3_factory(name="skip.mp3", title="跳", sylt=[("A", 1000)])
+    target.with_suffix(".lrc").write_text("旧的", encoding="utf-8")
+
+    assert run_files([target], use_online=False).skipped == 1
+    assert run_files([target], use_online=False, overwrite=True).synced == 1
+
+
+def test_run_files_collects_failures(tmp_path, mp3_factory):
+    """单文件模式同样要能导出失败清单。"""
+    target = mp3_factory(name="bare.mp3")
+    summary = run_files([target], use_online=False)
+    assert summary.not_found == 1
+    assert len(summary.failures) == 1
+    out = export_failure_report(summary, tmp_path / "失败清单.txt")
+    assert "bare.mp3" in out.read_text(encoding="utf-8-sig")
+
+
+def test_run_files_stop_event(tmp_path, mp3_factory):
+    target = mp3_factory(name="stop.mp3", title="停", sylt=[("A", 1000)])
+    event = threading.Event()
+    event.set()
+    summary = run_files([target], use_online=False, stop_event=event)
+    assert summary.stopped is True
+    assert summary.written == 0
+
+
+# ----------------------------------------------------------------------
+# 单文件格式校验
+
+
+def test_is_supported_audio_accepts_supported_extensions(tmp_path):
+    for ext in sorted(SUPPORTED_EXTENSIONS):
+        path = tmp_path / f"song{ext}"
+        path.write_bytes(b"\x00")
+        assert is_supported_audio(path) is True
+
+
+def test_is_supported_audio_is_case_insensitive(tmp_path):
+    path = tmp_path / "SONG.MP3"
+    path.write_bytes(b"\x00")
+    assert is_supported_audio(path) is True
+
+
+def test_is_supported_audio_rejects_other_files(tmp_path):
+    txt = tmp_path / "note.txt"
+    txt.write_bytes(b"\x00")
+    no_ext = tmp_path / "README"
+    no_ext.write_bytes(b"\x00")
+    folder = tmp_path / "album.flac"  # 名字像音频，其实是目录
+    folder.mkdir()
+
+    assert is_supported_audio(txt) is False
+    assert is_supported_audio(no_ext) is False
+    assert is_supported_audio(folder) is False
+    assert is_supported_audio(tmp_path / "不存在.mp3") is False
+
+
+def test_is_supported_audio_accepts_str_path(tmp_path):
+    path = tmp_path / "str.mp3"
+    path.write_bytes(b"\x00")
+    assert is_supported_audio(str(path)) is True
