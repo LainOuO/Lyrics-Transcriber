@@ -9,6 +9,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 from lyrics_extractor import APP_NAME, __version__, batch
+from lyrics_extractor.audio_file import SUPPORTED_EXTENSIONS_TEXT
 
 
 class App:
@@ -38,6 +39,13 @@ class App:
             side="left", fill="x", expand=True, padx=6
         )
         ttk.Button(row1, text="浏览…", command=self._browse).pack(side="left")
+
+        hint = ttk.Label(
+            frame,
+            text=f"支持格式：{SUPPORTED_EXTENSIONS_TEXT}",
+            foreground="#888888",
+        )
+        hint.pack(fill="x", padx=14)
 
         row2 = ttk.Frame(frame)
         row2.pack(fill="x", padx=10)

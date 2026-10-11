@@ -6,13 +6,25 @@ import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from lyrics_extractor.audio_file import SUPPORTED_EXTENSIONS
 from lyrics_extractor.extractor import LyricsExtractor, Status
 
 
-def scan_mp3s(folder, recursive: bool = True) -> list[Path]:
+def scan_audio_files(folder, recursive: bool = True) -> list[Path]:
+    """扫描文件夹下所有受支持的音频文件（按扩展名集合，大小写不敏感）。"""
     folder = Path(folder)
-    pattern = "**/*.mp3" if recursive else "*.mp3"
-    return sorted(folder.glob(pattern))
+    if not folder.is_dir():
+        return []
+    iterator = folder.rglob("*") if recursive else folder.glob("*")
+    return sorted(
+        path
+        for path in iterator
+        if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
+    )
+
+
+# 兼容旧名（历史上只支持 mp3）；新代码请用 scan_audio_files
+scan_mp3s = scan_audio_files
 
 
 @dataclass
@@ -46,10 +58,10 @@ def run_batch(
     """遍历文件夹逐个处理；通过回调向界面汇报进度与日志，stop_event 置位时提前停止。"""
     log = log_cb or (lambda msg: None)
     progress = progress_cb or (lambda done, total, result=None: None)
-    files = scan_mp3s(folder, recursive=recursive)
+    files = scan_audio_files(folder, recursive=recursive)
     summary = RunSummary(total=len(files))
     if not files:
-        log("该文件夹下没有找到 mp3 文件")
+        log("该文件夹下没有找到支持的音频文件")
         return summary
 
     kwargs = {"overwrite": overwrite, "use_online": use_online}
@@ -74,7 +86,7 @@ def run_batch(
         result = extractor.process(file_path)
         setattr(summary, counters[result.status], getattr(summary, counters[result.status]) + 1)
         if result.status in (Status.NOT_FOUND, Status.INSTRUMENTAL, Status.ERROR):
-            summary.failures.append((str(result.mp3_path), result.status.value, result.message))
+            summary.failures.append((str(result.path), result.status.value, result.message))
         detail = " ".join(x for x in (result.source, result.message) if x)
         log(f"[{index}/{summary.total}] {file_path.name} —— {result.status.value}"
             + (f"（{detail}）" if detail else ""))
