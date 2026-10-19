@@ -255,11 +255,14 @@ def test_transient_503_on_exact_lookup_is_retried(queued_api):
 
 
 def test_persistent_503_raises_after_all_attempts(queued_api):
+    """get 和 search 都持续 503 时才最终失败，错误信息带上服务端原因。"""
     calls, push = queued_api
     push("get", FakeResp(503, BUSY_503))
+    push("search", FakeResp(503, BUSY_503))
     with pytest.raises(OnlineError) as excinfo:
         fetch_lyrics("晴天", "周杰伦")
-    assert len(calls) == online.RETRY_ATTEMPTS
+    # get 与 search 各重试 RETRY_ATTEMPTS 次
+    assert len(calls) == online.RETRY_ATTEMPTS * 2
     message = str(excinfo.value)
     assert "503" in message
     assert "The server is busy" in message
@@ -269,10 +272,13 @@ def test_persistent_503_raises_after_all_attempts(queued_api):
 def test_retry_backoff_grows_exponentially(queued_api, no_sleep):
     _, push = queued_api
     push("get", FakeResp(503, BUSY_503))
+    push("search", FakeResp(503, BUSY_503))
     with pytest.raises(OnlineError):
         fetch_lyrics("晴天", "周杰伦")
     assert no_sleep == [
-        online.RETRY_BACKOFF * 2**i for i in range(online.RETRY_ATTEMPTS - 1)
+        online.RETRY_BACKOFF * 2**i
+        for _ in ("get", "search")
+        for i in range(online.RETRY_ATTEMPTS - 1)
     ]
 
 
@@ -312,11 +318,13 @@ def test_not_found_is_not_retried(queued_api):
 
 
 def test_client_error_is_not_retried(queued_api):
+    """400 属请求问题，重试没有意义；但仍要继续尝试 search 兜底。"""
     calls, push = queued_api
     push("get", FakeResp(400, {"message": "Bad Request"}))
+    push("search", FakeResp(200, []))
     with pytest.raises(OnlineError) as excinfo:
         fetch_lyrics("晴天", "周杰伦")
-    assert len(calls) == 1
+    assert len(calls) == 2
     assert "400" in str(excinfo.value)
 
 
@@ -329,9 +337,104 @@ def test_bad_json_is_not_retried(queued_api):
 
     calls, push = queued_api
     push("get", Bad())
+    push("search", FakeResp(200, []))
     with pytest.raises(OnlineError):
         fetch_lyrics("晴天", "周杰伦")
-    assert len(calls) == 1
+    # get 的坏响应没有重试，直接落到 search
+    assert [c["path"] for c in calls] == ["get", "search"]
+
+
+# ----------------------------------------------------------------------
+# /get 失败不再中断 search 兜底（回归：旧版直接抛错，整条链路断掉）
+
+def test_get_error_does_not_block_search(queued_api):
+    """/get 挂了（或请求参数不完整被 400），只要 search 能查到就还有救。"""
+    calls, push = queued_api
+    push("get", FakeResp(400, {"message": "Bad Request"}))
+    push("search", FakeResp(200, [RESULT_SYNCED]))
+    result = fetch_lyrics("晴天", "周杰伦", duration=269.3)
+    assert result.synced_text == "[00:12.34]故事的小黄花"
+    assert [c["path"] for c in calls] == ["get", "search"]
+
+
+def test_persistent_get_failure_falls_back_to_search(queued_api):
+    """/get 瞬时故障重试耗尽后，不把错误抛给用户，先让 search 试一试。"""
+    calls, push = queued_api
+    push("get", FakeResp(503, BUSY_503))
+    push("search", FakeResp(200, [RESULT_SYNCED]))
+    result = fetch_lyrics("晴天", "周杰伦", duration=269.3)
+    assert result.synced_text is not None
+    assert [c["path"] for c in calls] == ["get", "get", "get", "search"]
+
+
+def test_get_error_raised_when_search_finds_nothing(queued_api):
+    """search 也一无所获时，如实抛出 /get 的失败原因（断网/参数问题），
+    而不是谎报「未找到」。"""
+    _, push = queued_api
+    push("get", FakeResp(400, {"message": "Bad Request"}))
+    push("search", FakeResp(200, []))
+    with pytest.raises(OnlineError) as excinfo:
+        fetch_lyrics("晴天", "周杰伦")
+    assert "400" in str(excinfo.value)
+
+
+def test_missing_artist_skips_get(queued_api):
+    """/get 必须带歌手；歌手为空时问了也白问（必然 400），直接走 search。"""
+    calls, push = queued_api
+    push("search", FakeResp(200, [RESULT_SYNCED]))
+    result = fetch_lyrics("晴天", "", duration=269.3)
+    assert result.synced_text is not None
+    assert [c["path"] for c in calls] == ["search"]
+
+
+# ----------------------------------------------------------------------
+# 结果挑选：歌手一致 > 同步歌词（回归：旧版只看"结果里有没有歌手名"）
+
+def test_artist_match_outranks_synced_lyrics(fake_api):
+    """正确歌手的纯文本 优先于 错误歌手的同步歌词——错歌手的词是整篇错的。"""
+    _, setter = fake_api
+    setter("get", 404)
+    setter(
+        "search",
+        200,
+        [
+            {  # 别的歌手、带同步歌词（旧版会选它）
+                "trackName": "晴天",
+                "artistName": "别的歌手",
+                "duration": 269.5,
+                "instrumental": False,
+                "plainLyrics": "别人的词",
+                "syncedLyrics": "[00:01.00]别人的词",
+            },
+            {  # 正确歌手、只有纯文本
+                "trackName": "晴天",
+                "artistName": "周杰伦",
+                "duration": 269.8,
+                "instrumental": False,
+                "plainLyrics": "故事的小黄花",
+                "syncedLyrics": None,
+            },
+        ],
+    )
+    result = fetch_lyrics("晴天", "周杰伦", duration=269.3)
+    assert result.plain_text == "故事的小黄花"
+
+
+# ----------------------------------------------------------------------
+# 查询轮次去重：合并时必须保留更强的时长校验（回归：仅歌名轮丢了校验）
+
+def test_dedup_keeps_duration_guard(queued_api, no_romanize):
+    """歌手为空时，第一轮就退化为仅歌名查询，合并后必须保留时长校验，
+    否则时长对不上的同名曲（Live/另一首）会被错误认领。"""
+    calls, push = queued_api
+    push("search", FakeResp(200, [WRONG_HITOHIRA]))
+    assert fetch_lyrics("ひとひら", "", duration=235.75) is None
+    assert searched(calls) == ["ひとひら"]
+
+
+def test_search_rounds_merge_keeps_strongest_guard(no_romanize):
+    rounds = online._search_rounds("ひとひら", "", 235.75)
+    assert rounds == [("ひとひら", (), True)]
 
 
 # ----------------------------------------------------------------------

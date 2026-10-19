@@ -85,25 +85,48 @@ def fetch_lyrics(
     duration: float | None = None,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> OnlineLyrics | None:
-    """先精确匹配 /get，失败再按多轮模糊查询；都没有则返回 None。"""
+    """先精确匹配 /get，失败再按多轮模糊查询；都没有则返回 None。
+
+    /get 出错（缺歌手参数时的 400、瞬时故障重试耗尽等）不应中断流程，继续尝试
+    多轮 /search；仅当 search 也一无所获时才把 /get 的错误抛出——查询本身有毛病
+    时，谎报「未找到」比如实报错更糟。
+    """
     params = {"track_name": title, "artist_name": artist}
     if album:
         params["album_name"] = album
     if duration:
         params["duration"] = str(int(round(duration)))
-    exact = _get("get", params, timeout)
+
+    get_error: OnlineError | None = None
+    exact = None
+    if artist:
+        # /get 必须提供歌手；没有歌手时该接口不可能命中，问了也是白问
+        try:
+            exact = _get("get", params, timeout)
+        except OnlineError as exc:
+            get_error = exc
     if exact:
         return _to_lyrics(exact)
 
+    search_error: OnlineError | None = None
     for query, aliases, require_duration in _search_rounds(title, artist, duration):
-        results = _get("search", {"q": query}, timeout)
+        try:
+            results = _get("search", {"q": query}, timeout)
+        except OnlineError as exc:
+            search_error = exc
+            continue
         if not results:
             continue
         best = _pick_best(
-            results, title, duration, aliases=aliases, require_duration=require_duration
+            results, title, duration,
+            artist=artist, aliases=aliases, require_duration=require_duration,
         )
         if best is not None:
             return _to_lyrics(best)
+    if get_error is not None:
+        raise get_error
+    if search_error is not None:
+        raise search_error
     return None
 
 
@@ -116,16 +139,30 @@ def _search_rounds(title: str, artist: str, duration: float | None) -> list[tupl
 
     后两轮丢掉了歌手这个锚点，因此强制要求时长落在容差内；本地时长未知时直接
     不做这两轮——宁可查不到，也不要把别人的歌词写到文件里。
+
+    同一个查询词出现多次时（如歌手为空，第一轮就退化为仅歌名），合并为一轮，
+    但必须保留其中更强的把关要求——否则仅歌名的查询会丢掉时长校验。
     """
     rounds: list[tuple] = []
-    seen: set[str] = set()
+    index: dict[str, int] = {}
 
     def add(query: str, aliases: tuple = (), require_duration: bool = False):
         query = query.strip()
+        if not query:
+            return
         key = _norm(query)
-        if query and key not in seen:
-            seen.add(key)
-            rounds.append((query, aliases, require_duration))
+        if key in index:
+            position = index[key]
+            old_query, old_aliases, old_require = rounds[position]
+            merged_aliases = tuple(dict.fromkeys(old_aliases + tuple(aliases)))
+            rounds[position] = (
+                old_query,
+                merged_aliases,
+                old_require or require_duration,
+            )
+            return
+        index[key] = len(rounds)
+        rounds.append((query, tuple(aliases), require_duration))
 
     add(f"{artist} {title}".strip())
     if duration and not title.isascii():
@@ -185,10 +222,11 @@ def _pick_best(
     title: str,
     duration: float | None,
     *,
+    artist: str = "",
     aliases: tuple = (),
     require_duration: bool = False,
 ) -> dict | None:
-    """要求标题至少能对上，优先同步歌词、时长接近的结果。
+    """要求标题至少能对上，优先歌手一致、同步歌词、时长接近的结果。
 
     ``require_duration=True`` 用于丢了歌手锚点的那几轮：标题对上还不够，时长也必须
     落在容差内，才敢认领。
@@ -213,11 +251,17 @@ def _pick_best(
     if not candidates:
         return None
 
+    local_artist = _norm(artist)
+
     def score(r: dict) -> tuple:
+        # 歌手一致比"有没有同步歌词"更重要：错误歌手的同步歌词是整篇错词，
+        # 正确歌手的纯文本至少内容是对的（后续降级输出）。
+        artist_hit = (
+            1 if local_artist and local_artist in _norm(r.get("artistName", "")) else 0
+        )
         has_synced = bool(r.get("syncedLyrics"))
-        artist_hit = 1 if r.get("artistName") else 0
         near = 1 if _within_tolerance(r, duration) else 0
-        return (has_synced, artist_hit, near, float(r.get("duration") or 0))
+        return (artist_hit, has_synced, near, float(r.get("duration") or 0))
 
     return max(candidates, key=score)
 
