@@ -10,6 +10,9 @@ from lyrics_extractor import APP_NAME, __version__
 # 行首 LRC 时间戳 [mm:ss]、[mm:ss.xx]、[mm:ss.xxx]，允许一行多个
 _LRC_STAMP = re.compile(r"\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]")
 
+# 增强型 LRC 的逐字时间戳 <mm:ss.xx>：只出现在正文中间，解析行时间轴后应剥掉
+_WORD_STAMP = re.compile(r"<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>")
+
 
 def parse_lrc_text(text: str) -> list | None:
     """若文本中过半的非空行带时间戳（且至少两行），解析为 (毫秒, 文本) 列表；否则 None。
@@ -30,7 +33,7 @@ def parse_lrc_text(text: str) -> list | None:
         if not stamps:
             continue
         stamped += 1
-        body = line[pos:].strip()
+        body = _WORD_STAMP.sub("", line[pos:]).strip()
         for m in stamps:
             frac = m.group(3) or ""
             frac_ms = int(frac) * 10 ** (3 - len(frac)) if frac else 0

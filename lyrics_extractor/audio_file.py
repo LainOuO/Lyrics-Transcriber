@@ -145,11 +145,13 @@ def read_tags(tags_obj, duration: float = 0.0) -> TrackTags:
         tags.album = _lookup(tags_obj, ("album",))
     elif isinstance(tags_obj, MP4Tags):
         tags.title = _lookup(tags_obj, ("\xa9nam",))
-        tags.artist = _lookup(tags_obj, ("\xa9ART", "aART"))
+        # 不兜底 aART——那是专辑歌手（合集里往往不是唱这首歌的人）
+        tags.artist = _lookup(tags_obj, ("\xa9ART",))
         tags.album = _lookup(tags_obj, ("\xa9alb",))
     elif isinstance(tags_obj, ASFTags):
         tags.title = _lookup(tags_obj, ("Title",))
-        tags.artist = _lookup(tags_obj, ("Author", "WM/AlbumArtist"))
+        # 不兜底 WM/AlbumArtist——专辑歌手≠歌手，喂给在线搜索会找错人
+        tags.artist = _lookup(tags_obj, ("Author",))
         tags.album = _lookup(tags_obj, ("WM/AlbumTitle",))
     elif isinstance(tags_obj, APEv2):
         tags.title = _lookup(tags_obj, ("Title",))

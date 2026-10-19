@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from lyrics_extractor import online
 from lyrics_extractor.extractor import LyricsExtractor, Status
 from lyrics_extractor.online import OnlineError, OnlineLyrics
@@ -108,3 +110,48 @@ def test_corrupt_mp3_reports_error(tmp_path):
     result = LyricsExtractor(use_online=False).process(path)
     assert result.status == Status.ERROR
     assert "无法解析" in result.message
+
+
+# ----------------------------------------------------------------------
+# 回归：文件名回退要处理轨道号命名
+
+def test_display_tags_strips_track_number_prefix():
+    from lyrics_extractor.id3_reader import TrackTags
+
+    title, artist = LyricsExtractor._display_tags(
+        Path("01. 周杰伦 - 晴天.mp3"), TrackTags()
+    )
+    assert (title, artist) == ("晴天", "周杰伦")
+
+
+def test_display_tags_drops_numeric_segment():
+    from lyrics_extractor.id3_reader import TrackTags
+
+    title, artist = LyricsExtractor._display_tags(
+        Path("07 - 周杰伦 - 晴天.mp3"), TrackTags()
+    )
+    assert (title, artist) == ("晴天", "周杰伦")
+
+
+def test_display_tags_keeps_title_with_dash():
+    from lyrics_extractor.id3_reader import TrackTags
+
+    title, artist = LyricsExtractor._display_tags(
+        Path("周杰伦 - 恋曲1990 - Live.mp3"), TrackTags()
+    )
+    assert (title, artist) == ("恋曲1990 - Live", "周杰伦")
+
+
+def test_display_tags_plain_title_with_track_number():
+    from lyrics_extractor.id3_reader import TrackTags
+
+    title, artist = LyricsExtractor._display_tags(Path("03. 晴天.mp3"), TrackTags())
+    assert (title, artist) == ("晴天", "")
+
+
+def test_display_tags_leading_digits_not_always_a_track_number():
+    """歌名本身以数字开头（如 "7 rings"）不该被误剥。"""
+    from lyrics_extractor.id3_reader import TrackTags
+
+    title, _ = LyricsExtractor._display_tags(Path("7 rings.mp3"), TrackTags())
+    assert title == "7 rings"

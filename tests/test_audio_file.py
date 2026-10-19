@@ -223,3 +223,28 @@ def test_load_ape_via_adapter(tmp_path, patch_audio, ape_tags):
     audio = load_audio(tmp_path / "song.ape")
     assert (audio.tags.title, audio.tags.artist) == ("歌", "人")
     assert audio.embedded.source == "APE"
+
+
+# ----------------------------------------------------------------------
+# 回归：专辑歌手字段不得冒充歌手喂给在线搜索
+
+def test_mp4_album_artist_not_used_as_artist(tmp_path, patch_audio, mp4_tags):
+    """aART 是专辑歌手（合集里往往不是唱这首歌的人），不能兜底成歌手。"""
+    tags = mp4_tags(album="合集合名")
+    tags["aART"] = ["专辑歌手"]
+    patch_audio(tags)
+    audio = load_audio(tmp_path / "song.m4a")
+    assert audio.tags.artist == ""
+    assert audio.tags.album == "合集合名"
+
+
+def test_asf_album_artist_not_used_as_artist(tmp_path, patch_audio, asf_tags):
+    """WM/AlbumArtist 同理，不能兜底成歌手。"""
+    from mutagen.asf import ASFUnicodeAttribute
+
+    tags = asf_tags(album="合集合名")
+    tags["WM/AlbumArtist"] = [ASFUnicodeAttribute("专辑歌手")]
+    patch_audio(tags)
+    audio = load_audio(tmp_path / "song.wma")
+    assert audio.tags.artist == ""
+    assert audio.tags.album == "合集合名"

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import enum
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -110,16 +111,28 @@ class LyricsExtractor:
         return ExtractResult(path, Status.SYNCED if synced else Status.PLAIN,
                              source=source, message=message)
 
-    @staticmethod
-    def _display_tags(path: Path, tags) -> tuple[str, str]:
-        """标题为空时回退：按 "歌手 - 标题.<扩展名>" 的命名习惯从文件名补齐。"""
+    # 文件名回退时剥掉开头的轨道号，如 "01." / "02 -" / "1_"
+    _TRACK_PREFIX = re.compile(r"^\d{1,3}\s*[.\-_]\s+")
+
+    @classmethod
+    def _display_tags(cls, path: Path, tags) -> tuple[str, str]:
+        """标题为空时回退：按 "歌手 - 标题.<扩展名>" 的命名习惯从文件名补齐。
+
+        兼顾常见命名习惯：开头的轨道号（"01. 周杰伦 - 晴天"）剥掉；
+        纯数字的前导段（"01 - 周杰伦 - 晴天"）不当成歌手。
+        """
         title, artist = tags.title, tags.artist
         if not title:
-            stem = path.stem
+            stem = cls._TRACK_PREFIX.sub("", path.stem).strip()
             if " - " in stem:
-                maybe_artist, maybe_title = stem.split(" - ", 1)
-                artist = artist or maybe_artist.strip()
-                title = maybe_title.strip()
+                parts = [part.strip() for part in stem.split(" - ") if part.strip()]
+                while len(parts) >= 2 and parts[0].isdigit():
+                    parts.pop(0)
+                if len(parts) >= 2:
+                    artist = artist or parts[0]
+                    title = " - ".join(parts[1:])
+                elif parts:
+                    title = parts[0]
             else:
                 title = stem
         return title, artist

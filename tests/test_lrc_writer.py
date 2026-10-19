@@ -76,3 +76,16 @@ def test_write_lrc_writes_utf8_next_to_mp3(tmp_path):
     assert "[ti:晴天]" in text
     assert "[00:01.00]第一句" in text
     assert text.endswith("\n")
+
+
+def test_parse_lrc_text_strips_enhanced_word_stamps():
+    """增强型 LRC 的逐字时间戳 <mm:ss.xx> 不该残留在歌词正文里。"""
+    lines = parse_lrc_text("[00:01.00]<00:01.20>逐<00:01.50>字\n[00:30.00]副歌")
+    assert lines == [(1000, "逐字"), (30000, "副歌")]
+
+
+def test_parse_lrc_text_word_stamps_without_line_stamps_stays_plain():
+    """只有逐字时间戳、没有行时间戳的文本仍按纯文本处理（剥掉尖括号戳）。"""
+    text = "普通行1\n<00:01.20>逐<00:01.50>字\n普通行2\n普通行3"
+    lines = parse_lrc_text(text)
+    assert lines is None
