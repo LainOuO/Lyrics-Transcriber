@@ -528,7 +528,8 @@ class AiSettingsDialog(ModalDialog):
         ttk.Label(
             self.local_panel,
             text="需先安装增强包：命令行执行 pip install whisper-timestamped，"
-                 "并确保 ffmpeg 可用（详见 README）。",
+                 "并确保 ffmpeg 可用。\n注意：安装版（exe）暂不支持本机引擎，"
+                 "需用源码方式运行才能安装增强包（详见 README）。",
             foreground="#888888",
         ).pack(fill="x", padx=8, pady=(2, 6))
 

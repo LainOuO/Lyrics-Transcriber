@@ -15,3 +15,6 @@ dist/
 密钥.txt
 *.key
 .env
+
+# Mimosa 安全扫描工具的内部状态
+.mimosa/
