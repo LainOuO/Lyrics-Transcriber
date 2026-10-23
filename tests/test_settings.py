@@ -5,9 +5,19 @@ from lyrics_extractor.settings import (
     ENGINE_CLOUD,
     PROVIDER_DASHSCOPE,
     Settings,
+    clean_api_key,
     load_settings,
     save_settings,
 )
+
+
+def test_clean_api_key_strips_annotations():
+    """用户常把「sk-xxx（硅基流动）」整行粘进来——只留令牌，别让中文进请求头。"""
+    assert clean_api_key("sk-abc123（百炼）") == "sk-abc123"
+    assert clean_api_key("  sk-abc123 \n") == "sk-abc123"
+    assert clean_api_key("sk-ws-Hello_World-123") == "sk-ws-Hello_World-123"
+    assert clean_api_key("（百炼）sk-abc") == ""
+    assert clean_api_key("") == ""
 
 
 def test_defaults_point_to_dashscope_cloud():

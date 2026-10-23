@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, fields as _fields
 from pathlib import Path
 
@@ -57,6 +58,16 @@ class Settings:
     local_model: str = DEFAULT_LOCAL_MODEL
     # 人声分离（Demucs）是可选增强：勾了但没装依赖时自动跳过
     separate_vocals: bool = True
+
+
+def clean_api_key(raw: str) -> str:
+    """从用户粘贴的密钥串里只保留令牌部分（sk- 开头的字母数字段）。
+
+    实测会把「sk-xxx（硅基流动）」这样的注释一起粘进来——带中文的请求头
+    会在 HTTP 层直接炸掉（latin-1 编不了），先剥干净再进任何请求。
+    """
+    match = re.match(r"[A-Za-z0-9_\-]+", str(raw or "").strip())
+    return match.group(0) if match else ""
 
 
 def load_settings(path=None) -> Settings:

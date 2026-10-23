@@ -21,7 +21,12 @@ from pathlib import Path
 
 import requests
 
-from lyrics_extractor.settings import ENGINE_LOCAL, PROVIDER_DASHSCOPE, Settings
+from lyrics_extractor.settings import (
+    ENGINE_LOCAL,
+    PROVIDER_DASHSCOPE,
+    Settings,
+    clean_api_key,
+)
 
 DEFAULT_TIMEOUT = 180.0  # 上传 + 转写一首歌，远慢于普通接口请求
 # OpenAI 兼容转写接口的通行单文件上限；超限时直接拦下，不浪费一次上传
@@ -253,7 +258,8 @@ def _parse_payload(payload) -> Transcription:
 def transcribe_cloud(path, settings: Settings, timeout: float | None = None) -> Transcription:
     """把音频上传给云端转写接口；对瞬时故障退避重试后仍失败才抛错。"""
     path = Path(path)
-    if not str(settings.api_key or "").strip():
+    api_key = clean_api_key(getattr(settings, "api_key", ""))
+    if not api_key:
         raise TranscribeError("未配置 AI 服务密钥，请先在「AI 设置」里填写")
     size = path.stat().st_size
     if size > MAX_UPLOAD_BYTES:
@@ -269,7 +275,7 @@ def transcribe_cloud(path, settings: Settings, timeout: float | None = None) -> 
         if attempt > 1:
             time.sleep(RETRY_BACKOFF * 2 ** (attempt - 2))
         try:
-            resp = _request_with_fallback(url, settings.api_key, settings.model,
+            resp = _request_with_fallback(url, api_key, settings.model,
                                           path, timeout)
             status = resp.status_code
             if status == 200:

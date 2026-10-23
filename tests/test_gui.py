@@ -365,6 +365,22 @@ def test_start_passes_ai_settings_and_confirm_cb(app, tmp_path, monkeypatch):
     assert seen["confirm_cb"] == app.preview_bridge.confirm
 
 
+def test_settings_dialog_rejects_temporary_token(app, tk_root, monkeypatch, tmp_path):
+    """粘了带点号的百炼临时 Token：当场警告、不保存也不关窗（E2E 实测踩过的坑）。"""
+    monkeypatch.setattr(settings_module, "SETTINGS_PATH", tmp_path / "s.json")
+    app._open_ai_settings()
+    dialog = next(w for w in tk_root.winfo_children() if isinstance(w, AiSettingsDialog))
+    tk_root.update()
+    dialog.api_key_var.set("sk-ws-H.YMYIMPH.BmAm.xxxxxxxx（百炼）")
+    dialog._save()
+    kind, (title, text) = app._dialogs[0]
+    assert kind == "warning"
+    assert "API-KEY" in text
+    assert dialog.winfo_exists()  # 对话框留在原地等用户改
+    assert app.settings.api_key == ""  # 没把坏密钥保存进去
+    dialog.destroy()
+
+
 def test_settings_dialog_save_updates_app_and_disk(app, tk_root, monkeypatch, tmp_path):
     settings_path = tmp_path / "settings.json"
     monkeypatch.setattr(settings_module, "SETTINGS_PATH", settings_path)

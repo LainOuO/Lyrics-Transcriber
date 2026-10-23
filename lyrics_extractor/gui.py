@@ -205,7 +205,7 @@ class App:
         """勾了「AI 兜底」时的最低可用性检查；不满足时弹提示并返回 False。"""
         if self.settings.engine != settings_module.ENGINE_CLOUD:
             return True  # 本机引擎不需要密钥；依赖缺失会在逐首处理时报清楚的错
-        if self.settings.api_key.strip():
+        if settings_module.clean_api_key(self.settings.api_key):
             return True
         messagebox.showwarning(
             APP_NAME,
@@ -621,12 +621,24 @@ class AiSettingsDialog(ModalDialog):
         provider = self._provider_label_to_value.get(
             self.provider_var.get(), settings_module.PROVIDER_DASHSCOPE
         )
+        raw_key = self.api_key_var.get().strip()
+        if provider == settings_module.PROVIDER_DASHSCOPE and raw_key and (
+                "." in raw_key or raw_key.startswith("sk-ws-")):
+            messagebox.showwarning(
+                APP_NAME,
+                "这个密钥像百炼的「临时 Token」（sk-ws- 开头或中间带点号），"
+                "不是 API-KEY，用它调用会报「密钥无效」。\n\n"
+                "请在百炼控制台右上角头像 →「API-KEY」→「创建我的 API-KEY」，"
+                "复制 sk- 开头的一整串字母数字（不含点号）。",
+            )
+            return  # 不关对话框，改完再保存
         settings = settings_module.Settings(
             engine=self.engine_var.get(),
             provider=provider,
             dashscope_engine=self.dashscope_engine_var.get(),
             base_url=self.base_url_var.get().strip() or settings_module.DEFAULT_BASE_URL,
-            api_key=self.api_key_var.get().strip(),
+            # 密钥剥掉随手粘进来的注释/空白，只留令牌（带中文会让请求头崩掉）
+            api_key=settings_module.clean_api_key(raw_key),
             model=self.model_var.get().strip() or settings_module.DEFAULT_MODEL,
             local_model=self.local_model_var.get() or settings_module.DEFAULT_LOCAL_MODEL,
             separate_vocals=self.separate_var.get(),

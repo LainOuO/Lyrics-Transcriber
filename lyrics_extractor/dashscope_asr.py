@@ -35,6 +35,7 @@ from lyrics_extractor.settings import (
     DASHSCOPE_PARAFORMER_MODEL,
     DASHSCOPE_QWEN_MODEL,
     Settings,
+    clean_api_key,
 )
 
 DASHSCOPE_BASE = "https://dashscope.aliyuncs.com"
@@ -284,7 +285,7 @@ def _to_words(sentences: list) -> list[dict]:
 
 def transcribe_paraformer(path, settings: Settings) -> Transcription:
     """Paraformer 引擎：上传 → 建任务 → 轮询 → 词级时间戳拼同步歌词行。"""
-    api_key = str(settings.api_key or "").strip()
+    api_key = clean_api_key(getattr(settings, "api_key", ""))
     if not api_key:
         raise TranscribeError("未配置百炼密钥，请先在「AI 设置」里填写")
     path = Path(path)
@@ -324,7 +325,7 @@ def transcribe_qwen(path, settings: Settings) -> Transcription:
 
     单条音频最长 5 分钟（百炼限制），超长歌曲请换 Paraformer 引擎。
     """
-    api_key = str(settings.api_key or "").strip()
+    api_key = clean_api_key(getattr(settings, "api_key", ""))
     if not api_key:
         raise TranscribeError("未配置百炼密钥，请先在「AI 设置」里填写")
     path = Path(path)
