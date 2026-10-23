@@ -11,7 +11,6 @@ from lyrics_extractor.dashscope_asr import (
     _guard_fixed_url,
     transcribe,
     transcribe_paraformer,
-    transcribe_qwen,
 )
 from lyrics_extractor.settings import Settings
 
@@ -168,43 +167,21 @@ def test_paraformer_task_failed_reports_reason(audio, fake_net):
     assert "账户欠费" in str(excinfo.value)
 
 
-def test_qwen_chat_returns_plain_lines(audio, fake_net):
-    calls, when = fake_net
-    when("GET", "/api/v1/uploads", policy_response())
-    when("POST", "dashscope-file-test", FakeResp(200))
-    when("POST", "/chat/completions", FakeResp(200, {"choices": [
-        {"message": {"content": "第一行的词\n第二行的词"}}]}))
-    result = transcribe_qwen(audio, Settings(api_key="sk-dash"))
-    assert result.lines is None
-    assert result.plain_lines == ["第一行的词", "第二行的词"]
-    chat = next(c for c in calls if "/chat/completions" in c["url"])
-    assert chat["kwargs"]["json"]["model"] == "qwen3-asr-flash"
-    content = chat["kwargs"]["json"]["messages"][0]["content"]
-    assert content[0]["input_audio"]["data"].startswith("oss://")
-    assert "歌词" in content[1]["text"]
-
-
-def test_qwen_no_vocals_answered(audio, fake_net):
-    _, when = fake_net
-    when("GET", "/api/v1/uploads", policy_response())
-    when("POST", "dashscope-file-test", FakeResp(200))
-    when("POST", "/chat/completions", FakeResp(200, {"choices": [
-        {"message": {"content": "无歌词"}}]}))
-    result = transcribe_qwen(audio, Settings(api_key="sk-dash"))
-    assert result.empty is True
-
-
-def test_dispatch_by_dashscope_engine_setting(audio, fake_net):
+def test_dispatch_uses_paraformer(audio, fake_net):
     paraformer_flow(fake_net)
     assert transcribe(audio, Settings(api_key="sk-dash")).lines is not None
 
+
+def test_nested_openai_style_error_message_surfaces(audio, fake_net):
+    """兼容模式接口的错误体是 error.message 嵌套结构，原因要透传给用户。"""
     _, when = fake_net
-    when("GET", "/api/v1/uploads", policy_response())
-    when("POST", "dashscope-file-test", FakeResp(200))
-    when("POST", "/chat/completions", FakeResp(200, {"choices": [
-        {"message": {"content": "词"}}]}))
-    qwen_settings = Settings(api_key="sk-dash", dashscope_engine="qwen")
-    assert transcribe(audio, qwen_settings).plain_lines == ["词"]
+    when("GET", "/api/v1/uploads", FakeResp(400, {
+        "error": {"message": "The dedicated task asr does not support this input.",
+                  "code": "invalid_parameter_error"},
+    }))
+    with pytest.raises(TranscribeError) as excinfo:
+        transcribe_paraformer(audio, Settings(api_key="sk-dash"))
+    assert "does not support this input" in str(excinfo.value)
 
 
 def test_401_means_bad_key(audio, fake_net):

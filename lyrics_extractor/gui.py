@@ -528,20 +528,12 @@ class AiSettingsDialog(ModalDialog):
         self.dashscope_panel = ttk.Frame(self.cloud_panel)
         self.api_key_var = tk.StringVar(value=current.api_key)
         self._entry_row(self.dashscope_panel, "密钥：", self.api_key_var, show="*")
-        self.dashscope_engine_var = tk.StringVar(value=current.dashscope_engine)
-        ds_engine_row = ttk.Frame(self.dashscope_panel)
-        ds_engine_row.pack(fill="x", padx=8, pady=2)
-        ttk.Label(ds_engine_row, text="引擎：").pack(side="left")
-        for value, text in settings_module.DASHSCOPE_ENGINE_LABELS.items():
-            ttk.Radiobutton(
-                ds_engine_row, text=text, value=value,
-                variable=self.dashscope_engine_var,
-            ).pack(side="left", padx=(0, 8))
         ttk.Label(
             self.dashscope_panel,
-            text="百炼控制台 bailian.console.aliyun.com 开通后新建 API Key（国内手机号注册）。\n"
-                 "Paraformer：词级时间戳，直接出带时间轴歌词（约 0.29 元/小时，新开送免费额度）。\n"
-                 "Qwen3-ASR：大模型系识别，只出纯文本，单条音频最长 5 分钟。",
+            text="百炼控制台 bailian.console.aliyun.com 右上角头像 →「API-KEY」→"
+                 "「创建我的 API-KEY」（国内手机号注册）。\n"
+                 "Paraformer 引擎：词级时间戳，直接出带时间轴歌词"
+                 "（新开送免费额度，用完约 0.29 元/小时）。",
             foreground="#888888",
         ).pack(fill="x", padx=8, pady=(0, 6))
 
@@ -621,24 +613,12 @@ class AiSettingsDialog(ModalDialog):
         provider = self._provider_label_to_value.get(
             self.provider_var.get(), settings_module.PROVIDER_DASHSCOPE
         )
-        raw_key = self.api_key_var.get().strip()
-        if provider == settings_module.PROVIDER_DASHSCOPE and raw_key and (
-                "." in raw_key or raw_key.startswith("sk-ws-")):
-            messagebox.showwarning(
-                APP_NAME,
-                "这个密钥像百炼的「临时 Token」（sk-ws- 开头或中间带点号），"
-                "不是 API-KEY，用它调用会报「密钥无效」。\n\n"
-                "请在百炼控制台右上角头像 →「API-KEY」→「创建我的 API-KEY」，"
-                "复制 sk- 开头的一整串字母数字（不含点号）。",
-            )
-            return  # 不关对话框，改完再保存
         settings = settings_module.Settings(
             engine=self.engine_var.get(),
             provider=provider,
-            dashscope_engine=self.dashscope_engine_var.get(),
             base_url=self.base_url_var.get().strip() or settings_module.DEFAULT_BASE_URL,
             # 密钥剥掉随手粘进来的注释/空白，只留令牌（带中文会让请求头崩掉）
-            api_key=settings_module.clean_api_key(raw_key),
+            api_key=settings_module.clean_api_key(self.api_key_var.get()),
             model=self.model_var.get().strip() or settings_module.DEFAULT_MODEL,
             local_model=self.local_model_var.get() or settings_module.DEFAULT_LOCAL_MODEL,
             separate_vocals=self.separate_var.get(),

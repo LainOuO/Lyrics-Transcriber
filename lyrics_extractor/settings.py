@@ -24,16 +24,10 @@ PROVIDER_LABELS = {
     PROVIDER_OPENAI: "OpenAI 兼容（Groq 等）",
 }
 
-# 百炼的两个转写模型：Paraformer 走异步任务出词级时间戳；Qwen3-ASR 是
-# LLM 系语音识别，走聊天协议只回纯文本（单条音频 ≤5 分钟）
-DASHSCOPE_ENGINE_PARAFORMER = "paraformer"
-DASHSCOPE_ENGINE_QWEN = "qwen"
-DASHSCOPE_ENGINE_LABELS = {
-    DASHSCOPE_ENGINE_PARAFORMER: "Paraformer（带时间轴，推荐）",
-    DASHSCOPE_ENGINE_QWEN: "Qwen3-ASR（纯文本）",
-}
+# 百炼转写模型：Paraformer 走异步任务出词级时间戳。
+# Qwen 系引擎暂不提供（2026-10 实测：同步版限 5 分钟/10MB、异步版不认临时
+# 存储 oss:// 地址、qwen2-audio 不在兼容模式里），百炼放开后再接入。
 DASHSCOPE_PARAFORMER_MODEL = "paraformer-v2"
-DASHSCOPE_QWEN_MODEL = "qwen3-asr-flash"
 
 SETTINGS_DIR = Path.home() / ".lyrics_extractor"
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
@@ -51,7 +45,6 @@ DEFAULT_LOCAL_MODEL = "small"
 class Settings:
     engine: str = ENGINE_CLOUD
     provider: str = PROVIDER_DASHSCOPE  # 云端引擎下的服务商
-    dashscope_engine: str = DASHSCOPE_ENGINE_PARAFORMER  # 百炼引擎切换
     base_url: str = DEFAULT_BASE_URL  # 仅 OpenAI 兼容服务商使用
     api_key: str = ""
     model: str = DEFAULT_MODEL  # 仅 OpenAI 兼容服务商使用
@@ -61,12 +54,14 @@ class Settings:
 
 
 def clean_api_key(raw: str) -> str:
-    """从用户粘贴的密钥串里只保留令牌部分（sk- 开头的字母数字段）。
+    """从用户粘贴的密钥串里只保留令牌部分（字母数字、下划线、连字符、点号）。
 
     实测会把「sk-xxx（硅基流动）」这样的注释一起粘进来——带中文的请求头
     会在 HTTP 层直接炸掉（latin-1 编不了），先剥干净再进任何请求。
+    注意：百炼 2026 新版 API-KEY 本身就带点号（sk-ws-H.xxx.xxx 形态），
+    点号不能当分隔符截断，否则密钥被腰斩、服务端报 401。
     """
-    match = re.match(r"[A-Za-z0-9_\-]+", str(raw or "").strip())
+    match = re.match(r"[A-Za-z0-9_\-.]+", str(raw or "").strip())
     return match.group(0) if match else ""
 
 

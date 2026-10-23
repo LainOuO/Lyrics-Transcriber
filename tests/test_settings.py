@@ -1,5 +1,4 @@
 from lyrics_extractor.settings import (
-    DASHSCOPE_ENGINE_PARAFORMER,
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
     ENGINE_CLOUD,
@@ -16,6 +15,10 @@ def test_clean_api_key_strips_annotations():
     assert clean_api_key("sk-abc123（百炼）") == "sk-abc123"
     assert clean_api_key("  sk-abc123 \n") == "sk-abc123"
     assert clean_api_key("sk-ws-Hello_World-123") == "sk-ws-Hello_World-123"
+    # 百炼 2026 新版密钥自带点号：点号是密钥的一部分，绝不能当分隔符截断
+    # （旧版规则曾把这种密钥腰斩成 7 个字符，服务端报 401）
+    assert clean_api_key("sk-ws-H.YMYIMPH.BmAm.xxxxNd（百炼）") == \
+        "sk-ws-H.YMYIMPH.BmAm.xxxxNd"
     assert clean_api_key("（百炼）sk-abc") == ""
     assert clean_api_key("") == ""
 
@@ -24,7 +27,6 @@ def test_defaults_point_to_dashscope_cloud():
     settings = Settings()
     assert settings.engine == ENGINE_CLOUD
     assert settings.provider == PROVIDER_DASHSCOPE
-    assert settings.dashscope_engine == DASHSCOPE_ENGINE_PARAFORMER
     assert settings.api_key == ""
     assert settings.separate_vocals is True
     # OpenAI 兼容服务商（Groq）的字段保留默认值，切换服务商时直接可用

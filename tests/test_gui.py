@@ -365,22 +365,6 @@ def test_start_passes_ai_settings_and_confirm_cb(app, tmp_path, monkeypatch):
     assert seen["confirm_cb"] == app.preview_bridge.confirm
 
 
-def test_settings_dialog_rejects_temporary_token(app, tk_root, monkeypatch, tmp_path):
-    """粘了带点号的百炼临时 Token：当场警告、不保存也不关窗（E2E 实测踩过的坑）。"""
-    monkeypatch.setattr(settings_module, "SETTINGS_PATH", tmp_path / "s.json")
-    app._open_ai_settings()
-    dialog = next(w for w in tk_root.winfo_children() if isinstance(w, AiSettingsDialog))
-    tk_root.update()
-    dialog.api_key_var.set("sk-ws-H.YMYIMPH.BmAm.xxxxxxxx（百炼）")
-    dialog._save()
-    kind, (title, text) = app._dialogs[0]
-    assert kind == "warning"
-    assert "API-KEY" in text
-    assert dialog.winfo_exists()  # 对话框留在原地等用户改
-    assert app.settings.api_key == ""  # 没把坏密钥保存进去
-    dialog.destroy()
-
-
 def test_settings_dialog_save_updates_app_and_disk(app, tk_root, monkeypatch, tmp_path):
     settings_path = tmp_path / "settings.json"
     monkeypatch.setattr(settings_module, "SETTINGS_PATH", settings_path)
@@ -410,22 +394,20 @@ def test_settings_dialog_engine_switch_swaps_panels(app, tk_root):
     dialog.destroy()
 
 
-def test_settings_dialog_provider_and_engine_selection(app, tk_root, monkeypatch, tmp_path):
-    """默认百炼；可切引擎与服务商，保存后落盘生效。"""
+def test_settings_dialog_provider_selection(app, tk_root, monkeypatch, tmp_path):
+    """默认百炼；可切服务商，保存后落盘生效。"""
     settings_path = tmp_path / "settings.json"
     monkeypatch.setattr(settings_module, "SETTINGS_PATH", settings_path)
 
     app._open_ai_settings()
     dialog = next(w for w in tk_root.winfo_children() if isinstance(w, AiSettingsDialog))
     tk_root.update()
-    # 默认百炼 + Paraformer
+    # 默认百炼
     assert dialog.provider_var.get() == settings_module.PROVIDER_LABELS[
         settings_module.PROVIDER_DASHSCOPE]
-    dialog.dashscope_engine_var.set(settings_module.DASHSCOPE_ENGINE_QWEN)
     dialog.api_key_var.set("sk-dash")
     dialog._save()
     assert app.settings.provider == settings_module.PROVIDER_DASHSCOPE
-    assert app.settings.dashscope_engine == settings_module.DASHSCOPE_ENGINE_QWEN
     assert app.settings.api_key == "sk-dash"
     assert settings_module.load_settings(settings_path) == app.settings
 

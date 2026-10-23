@@ -7,9 +7,6 @@
 3. 建转写任务（Paraformer，``X-DashScope-Async: enable``）→ 轮询任务 → 下载结果
    JSON，词级时间戳在 ``transcripts[].sentences[].words[]``（毫秒）。
 
-Qwen3-ASR 引擎走 OpenAI 兼容的聊天协议（``input_audio`` 传 ``oss://`` 地址），
-只回纯文本（无时间轴，单条音频 ≤5 分钟）；两个引擎共用同一个 API 密钥。
-
 安全约定：所有发往网络的地址都经 :func:`_guard_fixed_url` /
 :func:`_guard_aliyun_url` 校验（https + 域名白名单 + 解析后 IP 不落在内网段），
 并且禁止跟随重定向——从服务端响应里拿到的动态地址不可能把请求引去内网。
@@ -33,7 +30,6 @@ from lyrics_extractor.ai_transcribe import (
 )
 from lyrics_extractor.settings import (
     DASHSCOPE_PARAFORMER_MODEL,
-    DASHSCOPE_QWEN_MODEL,
     Settings,
     clean_api_key,
 )
@@ -42,7 +38,6 @@ DASHSCOPE_BASE = "https://dashscope.aliyuncs.com"
 UPLOADS_URL = f"{DASHSCOPE_BASE}/api/v1/uploads"
 TRANSCRIPTION_URL = f"{DASHSCOPE_BASE}/api/v1/services/audio/asr/transcription"
 TASKS_URL = f"{DASHSCOPE_BASE}/api/v1/tasks"
-CHAT_COMPLETIONS_URL = f"{DASHSCOPE_BASE}/compatible-mode/v1/chat/completions"
 
 # 只允许请求这些固定主机（本模块全部端点都在其上）
 _ALLOWED_REQUEST_HOSTS = frozenset({"dashscope.aliyuncs.com"})
@@ -55,11 +50,6 @@ RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 POLL_INTERVAL = 2.0
 POLL_DEADLINE = 300.0
 REQUEST_TIMEOUT = 120.0
-
-QWEN_PROMPT = (
-    "请逐行转写这段音频中人声演唱的歌词，一行一句，只输出歌词文本本身，"
-    "不要解释、不要标点以外的任何内容；音频里没有人声就只回答：无歌词"
-)
 
 
 # ----------------------------------------------------------------------
@@ -117,9 +107,13 @@ def _headers(api_key: str, *, json_body: bool = False, oss_resolve: bool = False
 
 
 def _message(payload: dict) -> str:
-    """尽量摘出百炼给的原因（code/message 结构），取不到留空。"""
+    """尽量摘出百炼给的原因；兼容 DashScope（code/message）与 OpenAI 风格
+    （error.message 嵌套，实测兼容模式聊天接口返回这种）两种结构。"""
     if not isinstance(payload, dict):
         return ""
+    error = payload.get("error")
+    if isinstance(error, dict):
+        payload = error
     code = payload.get("code")
     message = payload.get("message")
     if message:
@@ -317,48 +311,14 @@ def transcribe_paraformer(path, settings: Settings) -> Transcription:
 
 
 # ----------------------------------------------------------------------
-# Qwen3-ASR：聊天协议，纯文本（无时间轴）
-
-
-def transcribe_qwen(path, settings: Settings) -> Transcription:
-    """Qwen3-ASR 引擎：LLM 系语音识别，走 OpenAI 兼容聊天接口，只出纯文本。
-
-    单条音频最长 5 分钟（百炼限制），超长歌曲请换 Paraformer 引擎。
-    """
-    api_key = clean_api_key(getattr(settings, "api_key", ""))
-    if not api_key:
-        raise TranscribeError("未配置百炼密钥，请先在「AI 设置」里填写")
-    path = Path(path)
-    oss_url = _upload_file(api_key, DASHSCOPE_QWEN_MODEL, path)
-
-    payload = _request(
-        "POST", CHAT_COMPLETIONS_URL,
-        json={
-            "model": DASHSCOPE_QWEN_MODEL,
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "input_audio", "input_audio": {"data": oss_url}},
-                    {"type": "text", "text": QWEN_PROMPT},
-                ],
-            }],
-        },
-        headers=_headers(api_key, json_body=True, oss_resolve=True),
-    )
-    choices = payload.get("choices") or []
-    content = choices[0].get("message", {}).get("content") if choices else None
-    text = str(content or "").strip()
-    if "无歌词" in text[:10]:
-        return Transcription(text=text)
-    return build_lines(text=text)
-
-
-# ----------------------------------------------------------------------
 # 统一入口
 
 
 def transcribe(path, settings: Settings) -> Transcription:
-    """按设置里的百炼引擎转写：paraformer（带时间轴）/ qwen（纯文本）。"""
-    if settings.dashscope_engine == "qwen":
-        return transcribe_qwen(path, settings)
+    """百炼转写统一入口（当前引擎：Paraformer，词级时间轴）。
+
+    Qwen 系引擎暂不提供（2026-10 实测）：qwen3-asr-flash 同步版限单条 5 分钟、
+    base64 10MB，整首歌曲放不下；qwen3-asr-flash-filetrans 异步版不认临时存储
+    的 oss:// 地址；qwen2-audio 不在 OpenAI 兼容模式里。百炼放开后再接入。
+    """
     return transcribe_paraformer(path, settings)
