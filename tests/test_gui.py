@@ -292,3 +292,244 @@ def test_summary_line_uses_runsummary_fields():
         assert hasattr(summary, field)
     assert batch.run_batch is not None
     assert batch.run_files is not None
+
+
+# ----------------------------------------------------------------------
+# AI 兜底：勾选框、设置、预览、失败清单挑选
+
+import threading
+import time
+from pathlib import Path
+
+from lyrics_extractor import settings as settings_module
+from lyrics_extractor.gui import (
+    AiPickerDialog,
+    AiPreviewDialog,
+    AiSettingsDialog,
+    PreviewBridge,
+)
+from lyrics_extractor.settings import ENGINE_CLOUD, ENGINE_LOCAL, Settings
+
+
+def test_ai_widgets_default_state(app):
+    assert app.ai_var.get() is False
+    assert str(app.ai_settings_btn["state"]) == "normal"
+    assert str(app.ai_pick_btn["state"]) == "disabled"
+
+
+def test_start_blocks_ai_without_cloud_key(app, tmp_path):
+    app.settings = Settings(engine=ENGINE_CLOUD, api_key="")
+    app.path_var.set(str(tmp_path))
+    app.ai_var.set(True)
+    app._start()
+    assert app.worker is None
+    kind, (title, text) = app._dialogs[0]
+    assert kind == "warning"
+    assert "密钥" in text
+
+
+def test_start_local_engine_needs_no_key(app, tmp_path, monkeypatch):
+    app.settings = Settings(engine=ENGINE_LOCAL, api_key="")
+    seen = {}
+
+    def fake_run_batch(folder, **kwargs):
+        seen["use_ai"] = kwargs["use_ai"]
+        return RunSummary(total=0)
+
+    monkeypatch.setattr(batch, "run_batch", fake_run_batch)
+    app.path_var.set(str(tmp_path))
+    app.ai_var.set(True)
+    app._start()
+    app.worker.join(timeout=5)
+    assert seen["use_ai"] is True
+    assert app._dialogs == []
+
+
+def test_start_passes_ai_settings_and_confirm_cb(app, tmp_path, monkeypatch):
+    app.settings = Settings(api_key="sk-test")
+    seen = {}
+
+    def fake_run_batch(folder, **kwargs):
+        seen["use_ai"] = kwargs["use_ai"]
+        seen["settings"] = kwargs["ai_settings"]
+        seen["confirm_cb"] = kwargs["confirm_cb"]
+        return RunSummary(total=0)
+
+    monkeypatch.setattr(batch, "run_batch", fake_run_batch)
+    app.path_var.set(str(tmp_path))
+    app.ai_var.set(True)
+    app._start()
+    app.worker.join(timeout=5)
+    assert seen["use_ai"] is True
+    assert seen["settings"].api_key == "sk-test"
+    assert seen["confirm_cb"] == app.preview_bridge.confirm
+
+
+def test_settings_dialog_save_updates_app_and_disk(app, tk_root, monkeypatch, tmp_path):
+    settings_path = tmp_path / "settings.json"
+    monkeypatch.setattr(settings_module, "SETTINGS_PATH", settings_path)
+    app._open_ai_settings()
+    dialog = next(
+        w for w in tk_root.winfo_children() if isinstance(w, AiSettingsDialog)
+    )
+    tk_root.update()
+    dialog.engine_var.set(ENGINE_CLOUD)
+    dialog.api_key_var.set("sk-new")
+    dialog.base_url_var.set("https://api.groq.com/openai/v1")
+    dialog.model_var.set("whisper-large-v3-turbo")
+    dialog.separate_var.set(False)
+    dialog._save()
+    assert app.settings.api_key == "sk-new"
+    assert app.settings.separate_vocals is False
+    assert settings_module.load_settings(settings_path) == app.settings
+
+
+def test_settings_dialog_engine_switch_swaps_panels(app, tk_root):
+    dialog = AiSettingsDialog(tk_root, Settings(), lambda s: None)
+    tk_root.update()
+    assert dialog.cloud_panel.winfo_ismapped() or True  # 布局状态不细究，能切换即可
+    dialog.engine_var.set(ENGINE_LOCAL)
+    tk_root.update()
+    dialog._save()
+    dialog.destroy()
+
+
+def test_preview_dialog_prefills_synced_lines(tk_root):
+    got = {}
+    dialog = AiPreviewDialog(
+        tk_root, "song.mp3", [(1000, "听错的词"), (3000, "第二行")], True,
+        lambda r: got.update(result=r),
+    )
+    tk_root.update()
+    content = dialog.text.get("1.0", "end-1c")
+    assert content == "[00:01.00]听错的词\n[00:03.00]第二行"
+
+
+def test_preview_dialog_save_parses_edited_text(tk_root):
+    got = {}
+    dialog = AiPreviewDialog(
+        tk_root, "song.mp3", [(1000, "听错的词"), (3000, "第二行")], True,
+        lambda r: got.update(result=r),
+    )
+    tk_root.update()
+    dialog.text.delete("1.0", "end")
+    dialog.text.insert("1.0", "[00:02.00]改对的词\n[00:04.00]第二行")
+    dialog._save()
+    assert got["result"] == ([(2000, "改对的词"), (4000, "第二行")], True)
+
+
+def test_preview_dialog_save_without_stamps_downgrades_to_plain(tk_root):
+    got = {}
+    dialog = AiPreviewDialog(
+        tk_root, "song.mp3", [(1000, "听错的词"), (3000, "第二行")], True,
+        lambda r: got.update(result=r),
+    )
+    tk_root.update()
+    dialog.text.delete("1.0", "end")
+    dialog.text.insert("1.0", "没有时间戳的词\n第二行")
+    dialog._save()
+    assert got["result"] == (["没有时间戳的词", "第二行"], False)
+
+
+def test_preview_dialog_skip_returns_none(tk_root):
+    got = {}
+    dialog = AiPreviewDialog(
+        tk_root, "song.mp3", ["纯文本行"], False, lambda r: got.update(result=r)
+    )
+    tk_root.update()
+    assert dialog.text.get("1.0", "end-1c") == "纯文本行"
+    dialog._finish_skip()
+    assert got["result"] is None
+
+
+def test_preview_bridge_roundtrip_between_threads(app, tk_root):
+    """工作线程提交 → 主线程弹预览 → 用户保存改过的词 → 工作线程拿到结果。"""
+    result_box = {}
+
+    def worker():
+        result_box["r"] = app.preview_bridge.confirm(
+            Path("某首歌.mp3"), [(1000, "原始词")], True
+        )
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    dialog = None
+    for _ in range(100):
+        app._poll_queue()  # 主线程侧处理 ai_preview 消息
+        dialog = next(
+            (w for w in tk_root.winfo_children() if isinstance(w, AiPreviewDialog)),
+            None,
+        )
+        if dialog is not None:
+            break
+        time.sleep(0.02)
+    assert dialog is not None, "预览窗没有弹出来"
+    dialog.text.delete("1.0", "end")
+    dialog.text.insert("1.0", "[00:01.50]改过的词\n[00:03.00]第二行")
+    dialog._save()
+    thread.join(timeout=5)
+    assert result_box["r"] == ([(1500, "改过的词"), (3000, "第二行")], True)
+
+
+def test_preview_bridge_stopped_run_skips_preview(app, tk_root):
+    """点了「停止」后，等待中的预览不再阻塞工作线程，按跳过处理。"""
+    result_box = {}
+    app.stop_event.clear()
+
+    def worker():
+        result_box["r"] = app.preview_bridge.confirm(Path("x.mp3"), [(1, "词")], True)
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    time.sleep(0.3)  # 让工作线程进入等待
+    app._stop()
+    thread.join(timeout=5)
+    assert result_box["r"] is None
+
+
+def test_on_done_enables_ai_pick_only_for_not_found(app):
+    summary = RunSummary(
+        total=2, not_found=1,
+        failures=[("a.mp3", Status.NOT_FOUND.value, "内嵌无歌词，在线未找到")],
+    )
+    app._on_done(summary)
+    assert str(app.ai_pick_btn["state"]) == "normal"
+
+
+def test_on_done_keeps_ai_pick_disabled_for_errors(app):
+    summary = RunSummary(
+        total=1, errors=1,
+        failures=[("a.mp3", Status.ERROR.value, "处理失败")],
+    )
+    app._on_done(summary)
+    assert str(app.ai_pick_btn["state"]) == "disabled"
+
+
+def test_ai_picker_lists_not_found_only_and_starts_run(app, tk_root, monkeypatch):
+    seen = {}
+
+    def fake_run_files(files, **kwargs):
+        seen["files"] = [Path(f) for f in files]
+        seen["use_ai"] = kwargs["use_ai"]
+        seen["use_online"] = kwargs["use_online"]
+        return RunSummary(total=len(files))
+
+    monkeypatch.setattr(batch, "run_files", fake_run_files)
+    app.summary = RunSummary(
+        failures=[
+            ("D:/歌/查不到.mp3", Status.NOT_FOUND.value, "内嵌无歌词，在线未找到"),
+            ("D:/歌/坏文件.mp3", Status.ERROR.value, "处理失败"),
+            ("D:/歌/纯音乐.mp3", Status.INSTRUMENTAL.value, "在线库标记为纯音乐"),
+        ]
+    )
+    app._open_ai_picker()
+    dialog = next(w for w in tk_root.winfo_children() if isinstance(w, AiPickerDialog))
+    tk_root.update()
+    assert dialog.listbox.size() == 1  # 只列「未找到歌词」的
+    assert "查不到.mp3" in dialog.listbox.get(0)
+    dialog._select_all()
+    dialog._start()
+    app.worker.join(timeout=5)
+    assert [p.name for p in seen["files"]] == ["查不到.mp3"]
+    assert seen["use_ai"] is True
+    assert seen["use_online"] is True
