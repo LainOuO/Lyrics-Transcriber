@@ -502,16 +502,59 @@ class AiSettingsDialog(ModalDialog):
                 engine_row, text=text, value=value, variable=self.engine_var
             ).pack(side="left", padx=(0, 10))
 
-        self.cloud_panel = ttk.LabelFrame(body, text="云端接口（OpenAI 兼容）")
+        self.cloud_panel = ttk.LabelFrame(body, text="云端接口")
+
+        provider_row = ttk.Frame(self.cloud_panel)
+        provider_row.pack(fill="x", padx=8, pady=(6, 2))
+        ttk.Label(provider_row, text="服务商：").pack(side="left")
+        # 下拉里显示中文标签，保存时再映射回内部值
+        self._provider_label_to_value = dict(
+            (label, value) for value, label in settings_module.PROVIDER_LABELS.items()
+        )
+        self.provider_var = tk.StringVar(
+            value=settings_module.PROVIDER_LABELS.get(
+                current.provider,
+                settings_module.PROVIDER_LABELS[settings_module.PROVIDER_DASHSCOPE],
+            )
+        )
+        self.provider_var.trace_add("write", lambda *_: self._refresh_panels())
+        ttk.Combobox(
+            provider_row, textvariable=self.provider_var,
+            values=tuple(settings_module.PROVIDER_LABELS.values()),
+            state="readonly", width=24,
+        ).pack(side="left")
+
+        # 百炼面板（默认服务商）
+        self.dashscope_panel = ttk.Frame(self.cloud_panel)
+        self.api_key_var = tk.StringVar(value=current.api_key)
+        self._entry_row(self.dashscope_panel, "密钥：", self.api_key_var, show="*")
+        self.dashscope_engine_var = tk.StringVar(value=current.dashscope_engine)
+        ds_engine_row = ttk.Frame(self.dashscope_panel)
+        ds_engine_row.pack(fill="x", padx=8, pady=2)
+        ttk.Label(ds_engine_row, text="引擎：").pack(side="left")
+        for value, text in settings_module.DASHSCOPE_ENGINE_LABELS.items():
+            ttk.Radiobutton(
+                ds_engine_row, text=text, value=value,
+                variable=self.dashscope_engine_var,
+            ).pack(side="left", padx=(0, 8))
+        ttk.Label(
+            self.dashscope_panel,
+            text="百炼控制台 bailian.console.aliyun.com 开通后新建 API Key（国内手机号注册）。\n"
+                 "Paraformer：词级时间戳，直接出带时间轴歌词（约 0.29 元/小时，新开送免费额度）。\n"
+                 "Qwen3-ASR：大模型系识别，只出纯文本，单条音频最长 5 分钟。",
+            foreground="#888888",
+        ).pack(fill="x", padx=8, pady=(0, 6))
+
+        # OpenAI 兼容面板（Groq 等）
+        self.openai_panel = ttk.Frame(self.cloud_panel)
         self.base_url_var = tk.StringVar(value=current.base_url)
         self.model_var = tk.StringVar(value=current.model)
-        self.api_key_var = tk.StringVar(value=current.api_key)
-        self._entry_row(self.cloud_panel, "接口地址：", self.base_url_var)
-        self._entry_row(self.cloud_panel, "模型名：", self.model_var)
-        self._entry_row(self.cloud_panel, "密钥：", self.api_key_var, show="*")
+        self._entry_row(self.openai_panel, "接口地址：", self.base_url_var)
+        self._entry_row(self.openai_panel, "模型名：", self.model_var)
+        self._entry_row(self.openai_panel, "密钥：", self.api_key_var, show="*")
         ttk.Label(
-            self.cloud_panel,
-            text="默认 Groq：在 console.groq.com 免费注册即可拿到密钥，转写有免费额度。\n"
+            self.openai_panel,
+            text="默认 Groq：在 console.groq.com 免费注册拿密钥（部分网络打不开该网页）。\n"
                  "任何 OpenAI 兼容的转写服务都能用，改地址、模型名和密钥即可。",
             foreground="#888888",
         ).pack(fill="x", padx=8, pady=(0, 6))
@@ -559,17 +602,29 @@ class AiSettingsDialog(ModalDialog):
         )
 
     def _refresh_panels(self) -> None:
-        """按引擎切换云端/本地面板。"""
+        """按引擎与服务商切换面板：本机/云端，百炼/OpenAI 兼容。"""
         if self.engine_var.get() == settings_module.ENGINE_LOCAL:
             self.cloud_panel.pack_forget()
             self.local_panel.pack(fill="x", pady=4)
+            return
+        self.local_panel.pack_forget()
+        self.cloud_panel.pack(fill="x", pady=4)
+        provider = self._provider_label_to_value.get(self.provider_var.get())
+        if provider == settings_module.PROVIDER_OPENAI:
+            self.dashscope_panel.pack_forget()
+            self.openai_panel.pack(fill="x")
         else:
-            self.local_panel.pack_forget()
-            self.cloud_panel.pack(fill="x", pady=4)
+            self.openai_panel.pack_forget()
+            self.dashscope_panel.pack(fill="x")
 
     def _save(self) -> None:
+        provider = self._provider_label_to_value.get(
+            self.provider_var.get(), settings_module.PROVIDER_DASHSCOPE
+        )
         settings = settings_module.Settings(
             engine=self.engine_var.get(),
+            provider=provider,
+            dashscope_engine=self.dashscope_engine_var.get(),
             base_url=self.base_url_var.get().strip() or settings_module.DEFAULT_BASE_URL,
             api_key=self.api_key_var.get().strip(),
             model=self.model_var.get().strip() or settings_module.DEFAULT_MODEL,

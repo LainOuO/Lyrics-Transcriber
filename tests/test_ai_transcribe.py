@@ -10,7 +10,12 @@ from lyrics_extractor.ai_transcribe import (
     transcribe_cloud,
     transcriptions_url,
 )
-from lyrics_extractor.settings import ENGINE_LOCAL, Settings
+from lyrics_extractor.settings import (
+    ENGINE_LOCAL,
+    PROVIDER_DASHSCOPE,
+    PROVIDER_OPENAI,
+    Settings,
+)
 
 
 class FakeResp:
@@ -344,12 +349,29 @@ def engines(monkeypatch, tmp_path):
     return seen
 
 
-def test_dispatch_cloud_by_default(audio, engines):
+def test_dispatch_openai_provider(audio, engines):
     seen = engines
-    result = ai_transcribe.transcribe_audio(audio, Settings(separate_vocals=False))
+    result = ai_transcribe.transcribe_audio(
+        audio, Settings(separate_vocals=False, provider=PROVIDER_OPENAI))
     assert str(seen["cloud"]) == str(audio)
     assert "separate" not in seen
     assert result.plain_lines == ["云"]
+
+
+def test_dispatch_dashscope_provider(audio, engines, monkeypatch):
+    from lyrics_extractor import dashscope_asr
+
+    seen = engines
+
+    def fake_dashscope(path, settings):
+        seen["dashscope"] = path
+        return ai_transcribe.Transcription(text="百", plain_lines=["百"])
+
+    monkeypatch.setattr(dashscope_asr, "transcribe", fake_dashscope)
+    result = ai_transcribe.transcribe_audio(audio, Settings(separate_vocals=False))
+    assert str(seen["dashscope"]) == str(audio)
+    assert "cloud" not in seen  # 百炼不该再走 OpenAI 兼容客户端
+    assert result.plain_lines == ["百"]
 
 
 def test_dispatch_local_engine(audio, engines):
@@ -380,7 +402,8 @@ def test_vocal_separation_feeds_engine_and_cleans_up(audio, engines, monkeypatch
 
     monkeypatch.setattr(ai_transcribe, "transcribe_cloud", RaisingCloud())
     with pytest.raises(TranscribeError):
-        ai_transcribe.transcribe_audio(audio, Settings())
+        ai_transcribe.transcribe_audio(
+            audio, Settings(provider=PROVIDER_OPENAI))
     # 引擎吃到的是分离出的人声轨
     assert str(engines["cloud"]) == str(vocals)
     # 转写失败也要把临时目录清掉
@@ -391,5 +414,6 @@ def test_separation_skipped_when_unavailable(audio, engines, monkeypatch):
     from lyrics_extractor import vocal_sep
 
     monkeypatch.setattr(vocal_sep, "is_available", lambda: False)
-    ai_transcribe.transcribe_audio(audio, Settings(separate_vocals=True))
+    ai_transcribe.transcribe_audio(
+        audio, Settings(separate_vocals=True, provider=PROVIDER_OPENAI))
     assert "cloud" in engines

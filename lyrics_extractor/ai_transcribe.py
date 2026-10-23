@@ -21,7 +21,7 @@ from pathlib import Path
 
 import requests
 
-from lyrics_extractor.settings import ENGINE_LOCAL, Settings
+from lyrics_extractor.settings import ENGINE_LOCAL, PROVIDER_DASHSCOPE, Settings
 
 DEFAULT_TIMEOUT = 180.0  # 上传 + 转写一首歌，远慢于普通接口请求
 # OpenAI 兼容转写接口的通行单文件上限；超限时直接拦下，不浪费一次上传
@@ -319,6 +319,11 @@ def transcribe_audio(path, settings: Settings | None, log=None) -> Transcription
     try:
         if settings.engine == ENGINE_LOCAL:
             return whisper_local.transcribe_local(source, settings)
+        if settings.provider == PROVIDER_DASHSCOPE:
+            # 懒加载：dashscope_asr 反向引用本模块的类型与拼行逻辑
+            from lyrics_extractor import dashscope_asr
+
+            return dashscope_asr.transcribe(source, settings)
         return transcribe_cloud(source, settings)
     finally:
         if cleanup is not None:

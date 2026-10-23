@@ -1,20 +1,25 @@
 from lyrics_extractor.settings import (
+    DASHSCOPE_ENGINE_PARAFORMER,
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
     ENGINE_CLOUD,
+    PROVIDER_DASHSCOPE,
     Settings,
     load_settings,
     save_settings,
 )
 
 
-def test_defaults_point_to_groq_free_tier():
+def test_defaults_point_to_dashscope_cloud():
     settings = Settings()
     assert settings.engine == ENGINE_CLOUD
-    assert settings.base_url == DEFAULT_BASE_URL == "https://api.groq.com/openai/v1"
-    assert settings.model == DEFAULT_MODEL == "whisper-large-v3-turbo"
+    assert settings.provider == PROVIDER_DASHSCOPE
+    assert settings.dashscope_engine == DASHSCOPE_ENGINE_PARAFORMER
     assert settings.api_key == ""
     assert settings.separate_vocals is True
+    # OpenAI 兼容服务商（Groq）的字段保留默认值，切换服务商时直接可用
+    assert settings.base_url == DEFAULT_BASE_URL == "https://api.groq.com/openai/v1"
+    assert settings.model == DEFAULT_MODEL == "whisper-large-v3-turbo"
 
 
 def test_save_then_load_roundtrip(tmp_path):
