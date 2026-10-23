@@ -59,6 +59,9 @@ def run_files(
     *,
     overwrite: bool = False,
     use_online: bool = True,
+    use_ai: bool = False,
+    ai_settings=None,
+    confirm_cb=None,
     stop_event: threading.Event | None = None,
     progress_cb=None,
     log_cb=None,
@@ -76,7 +79,13 @@ def run_files(
     if not files:
         return summary
 
-    kwargs = {"overwrite": overwrite, "use_online": use_online}
+    kwargs = {
+        "overwrite": overwrite,
+        "use_online": use_online,
+        "use_ai": use_ai,
+        "ai_settings": ai_settings,
+        "confirm_cb": confirm_cb,
+    }
     if timeout is not None:
         kwargs["timeout"] = timeout
     extractor = LyricsExtractor(**kwargs)
@@ -113,6 +122,9 @@ def run_batch(
     overwrite: bool = False,
     recursive: bool = True,
     use_online: bool = True,
+    use_ai: bool = False,
+    ai_settings=None,
+    confirm_cb=None,
     stop_event: threading.Event | None = None,
     progress_cb=None,
     log_cb=None,
@@ -128,6 +140,9 @@ def run_batch(
         files,
         overwrite=overwrite,
         use_online=use_online,
+        use_ai=use_ai,
+        ai_settings=ai_settings,
+        confirm_cb=confirm_cb,
         stop_event=stop_event,
         progress_cb=progress_cb,
         log_cb=log_cb,

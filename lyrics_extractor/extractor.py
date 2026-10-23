@@ -1,4 +1,4 @@
-"""单文件处理流水线：读内嵌歌词 → 在线兜底 → 写 LRC。
+"""单文件处理流水线：读内嵌歌词 → 在线兜底 → AI 听歌转写 → 写 LRC。
 
 格式无关：通过 :mod:`lyrics_extractor.audio_file` 统一读取标签与内嵌歌词，
 支持 mp3 / flac / wav / m4a / mp4 / aac / ogg / opus / wma / ape / aiff。
@@ -11,7 +11,13 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from lyrics_extractor import audio_file, lrc_writer, online
+from lyrics_extractor import (
+    ai_transcribe,
+    audio_file,
+    lrc_writer,
+    online,
+    settings as app_settings,
+)
 
 
 class Status(enum.Enum):
@@ -46,10 +52,18 @@ class LyricsExtractor:
         overwrite: bool = False,
         use_online: bool = True,
         timeout: float = online.DEFAULT_TIMEOUT,
+        use_ai: bool = False,
+        ai_settings=None,
+        confirm_cb=None,
     ):
         self.overwrite = overwrite
         self.use_online = use_online
         self.timeout = timeout
+        self.use_ai = use_ai
+        self.ai_settings = ai_settings
+        # 预览回调：confirm_cb(path, lines, synced) -> (行列表, 是否同步) | None。
+        # None 表示用户在预览里跳过；不传则视为直接采纳（批量/无界面场景）。
+        self.confirm_cb = confirm_cb
 
     def process(self, mp3_path) -> ExtractResult:
         path = Path(mp3_path)
@@ -71,8 +85,18 @@ class LyricsExtractor:
                 f"内嵌{embedded.source}",
             )
 
+        result: ExtractResult | None = None
         if self.use_online and title:
-            return self._online(path, tags, title, artist)
+            result = self._online(path, tags, title, artist)
+
+        # AI 兜底只接「没查到」的盘：在线报错（网络问题）或纯音乐不是它的活
+        if result is None or result.status == Status.NOT_FOUND:
+            if self.use_ai:
+                ai_result = self._ai_transcribe(path, tags, title, artist)
+                if ai_result is not None:
+                    return ai_result
+        if result is not None:
+            return result
         if not self.use_online:
             return ExtractResult(path, Status.NOT_FOUND, message="内嵌无歌词（在线兜底已关闭）")
         return ExtractResult(path, Status.NOT_FOUND, message="内嵌无歌词，且缺少标题无法在线查询")
@@ -104,6 +128,35 @@ class LyricsExtractor:
             if plain:
                 return self._write(path, tags, title, artist, plain, False, "lrclib")
         return ExtractResult(path, Status.NOT_FOUND, message="在线接口返回内容为空")
+
+    def _ai_transcribe(self, path, tags, title, artist) -> ExtractResult | None:
+        """AI 听歌转写兜底；返回 None 表示没转出可用结果（沿用原有 NOT_FOUND）。"""
+        try:
+            transcription = ai_transcribe.transcribe_audio(
+                path, self.ai_settings or app_settings.Settings()
+            )
+        except ai_transcribe.TranscribeError as exc:
+            return ExtractResult(path, Status.ERROR, message=f"AI 转写失败: {exc}")
+        if transcription.empty:
+            return ExtractResult(
+                path, Status.NOT_FOUND, source="AI 转写",
+                message="AI 未识别出人声歌词（可能是纯音乐）",
+            )
+
+        if transcription.lines:
+            lines, synced = transcription.lines, True
+        else:
+            lines, synced = transcription.plain_lines, False
+
+        if self.confirm_cb is not None:
+            edited = self.confirm_cb(path, lines, synced)
+            if edited is None or not edited[0]:
+                return ExtractResult(
+                    path, Status.NOT_FOUND, source="AI 转写",
+                    message="AI 转写完成，但已在预览中跳过、未保存",
+                )
+            lines, synced = edited
+        return self._write(path, tags, title, artist, lines, synced, "AI 转写")
 
     def _write(self, path, tags, title, artist, lines, synced: bool, source: str) -> ExtractResult:
         lrc_writer.write_lrc(path, title, artist, tags.album, lines, synced)

@@ -270,3 +270,77 @@ def test_is_supported_audio_accepts_str_path(tmp_path):
     path = tmp_path / "str.mp3"
     path.write_bytes(b"\x00")
     assert is_supported_audio(str(path)) is True
+
+
+# ----------------------------------------------------------------------
+# AI 兜底参数透传
+
+
+def test_run_files_passes_ai_options_to_extractor(tmp_path, mp3_factory, monkeypatch):
+    """界面勾选的 AI 选项要原样传到流水线。"""
+    from pathlib import Path as _Path
+
+    from lyrics_extractor import batch as batch_mod
+    from lyrics_extractor.extractor import ExtractResult, Status
+
+    seen = {}
+
+    class FakeExtractor:
+        def __init__(self, **kwargs):
+            seen.update(kwargs)
+
+        def process(self, path):
+            return ExtractResult(_Path(path), Status.NOT_FOUND)
+
+    monkeypatch.setattr(batch_mod, "LyricsExtractor", FakeExtractor)
+    target = mp3_factory(name="bare.mp3")
+    run_files(
+        [target], use_online=False, use_ai=True,
+        ai_settings="设置对象", confirm_cb=lambda *a: None,
+    )
+    assert seen["use_ai"] is True
+    assert seen["ai_settings"] == "设置对象"
+    assert callable(seen["confirm_cb"])
+    # 默认关闭时也原样传递（False / None）
+    seen.clear()
+    run_files([target], use_online=False)
+    assert seen["use_ai"] is False
+    assert seen["ai_settings"] is None
+
+
+def test_run_batch_forwards_ai_options(tmp_path, mp3_factory, monkeypatch):
+    from lyrics_extractor import batch as batch_mod
+    from lyrics_extractor.batch import RunSummary
+
+    seen = {}
+
+    def fake_run_files(files, **kwargs):
+        seen["files"] = list(files)
+        seen["ai"] = (kwargs.get("use_ai"), kwargs.get("ai_settings"),
+                      kwargs.get("confirm_cb"))
+        return RunSummary(total=len(files))
+
+    monkeypatch.setattr(batch_mod, "run_files", fake_run_files)
+    mp3_factory(name="a.mp3")
+    run_batch(tmp_path, use_ai=True, ai_settings="S", confirm_cb="cb")
+    assert seen["ai"] == (True, "S", "cb")
+
+
+def test_run_files_ai_fallback_writes_lrc_end_to_end(tmp_path, mp3_factory, monkeypatch):
+    """全链路：无内嵌无在线 → AI 转写 → 写出带时间轴的 .lrc。"""
+    from lyrics_extractor import ai_transcribe
+
+    target = mp3_factory(name="bare.mp3")
+    monkeypatch.setattr(
+        ai_transcribe, "transcribe_audio",
+        lambda path, settings: ai_transcribe.Transcription(
+            text="AI 第一行 AI 第二行",
+            lines=[(1000, "AI 第一行"), (3000, "AI 第二行")],
+            plain_lines=["AI 第一行", "AI 第二行"],
+        ),
+    )
+    summary = run_files([target], use_online=False, use_ai=True)
+    assert summary.synced == 1
+    assert summary.failures == []
+    text = target.with_suffix(".lrc").read_text(encoding="utf-8")
+    assert "[00:01.00]AI 第一行" in text
