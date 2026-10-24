@@ -2,6 +2,19 @@
 
 从音频文件中提取歌词，生成配套的 `.lrc` 文件（与音频同目录、同名，播放器可自动加载）。
 
+## 下载安装（Windows / macOS / Linux）
+
+从 [Releases](https://github.com/LainOuO/Lyrics-Transcriber/releases) 按系统下载：
+
+| 系统 | 下载 | 安装 |
+| --- | --- | --- |
+| Windows | `LyricsTranscriber-Setup-v*.exe` | 双击安装，覆盖旧版升级 |
+| macOS | `LyricsTranscriber-v*-macOS.dmg` | 打开 dmg 拖入「应用程序」；首次运行**右键 → 打开**（未签名） |
+| Linux | `LyricsTranscriber-v*-Linux.AppImage` | `chmod +x` 后直接运行 |
+
+三平台功能完全一致；界面自动选用平台中文字体（微软雅黑 / 苹方 / Noto）。
+v0.6.0 起每个版本都会同时提供三平台安装包（GitHub Actions 自动构建）。
+
 ## 支持的格式
 
 `.mp3` / `.flac` / `.wav` / `.m4a` / `.mp4` / `.aac` / `.ogg` / `.opus` / `.wma` / `.ape` / `.aiff` / `.aif`

@@ -62,13 +62,23 @@ def _font(size: int = 10, weight: str = "normal") -> tuple:
     return (_FAMILY, size, weight)
 
 
+# 各平台中文字体候选：Windows 微软雅黑、macOS 苹方、Linux 常见 Noto/文泉驿
+_FONT_CANDIDATES = (
+    "Microsoft YaHei UI", "Microsoft YaHei",    # Windows
+    "PingFang SC", "Hiragino Sans GB",           # macOS
+    "Noto Sans CJK SC", "Noto Sans SC",          # Linux（主流发行版）
+    "WenQuanYi Micro Hei",                       # Linux（Debian 系老环境）
+    "Segoe UI",                                  # Windows 英文界面兜底
+)
+
+
 def _pick_family(widget) -> str:
     """按优先级挑一个本机有的中文字体族；都没有就沿用默认值。"""
     try:
         families = set(tkfont.families(widget))
     except tk.TclError:
         return _FAMILY
-    for name in ("Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", "Segoe UI"):
+    for name in _FONT_CANDIDATES:
         if name in families:
             return name
     return _FAMILY

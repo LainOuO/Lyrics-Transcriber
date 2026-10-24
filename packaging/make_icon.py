@@ -1,8 +1,11 @@
-"""一次性生成应用图标 lyrics_transcriber/assets/app.ico（开发用，不参与打包）。
+"""一次性生成应用图标（开发用，不参与打包）：app.ico（Windows）+ app-1024.png。
 
 改图标时跑一次即可：python packaging/make_icon.py
 依赖 Pillow，仅此脚本使用；程序本身与打包流程都不依赖它。
+1024 PNG 供 macOS 构建 icns 与 Linux AppImage 图标使用。
 """
+from pathlib import Path
+
 from PIL import Image, ImageDraw
 
 S = 1024
@@ -42,10 +45,9 @@ flag = bezier((560, 262), (716, 306), (734, 508), 14) + \
 nd.polygon(flag, fill=(255, 255, 255, 255))
 icon.alpha_composite(note)
 
-icon.save("C:/Users/good/AppData/Local/Temp/shot/icon_1024.png")
-icon.save("E:/Vibecoding/歌单/lyrics_transcriber/assets/app.ico",
+assets = Path(__file__).resolve().parent.parent / "lyrics_transcriber" / "assets"
+assets.mkdir(parents=True, exist_ok=True)
+icon.save(assets / "app.ico",
           sizes=[(s, s) for s in (256, 128, 64, 48, 32, 24, 16)])
-for s in (16, 24, 32, 48):
-    icon.resize((s, s), Image.LANCZOS).resize((s * 8, s * 8), Image.NEAREST).save(
-        f"C:/Users/good/AppData/Local/Temp/shot/icon_{s}.png")
-print("ok")
+icon.save(assets / "app-1024.png")
+print(f"ok: {assets / 'app.ico'} + app-1024.png")

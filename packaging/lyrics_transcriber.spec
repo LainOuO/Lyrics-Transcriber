@@ -1,17 +1,30 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller 配置：打包为 onedir 应用目录（主 exe + _internal 依赖），窗口程序无控制台。"""
+"""PyInstaller 配置：打包为 onedir 应用目录（主程序 + _internal 依赖），窗口程序无控制台。
+
+三平台通用（Windows/macOS/Linux 的 CI 与本地脚本都走这份 spec）：
+图标按平台取用——Windows 用 app.ico，macOS 用构建时生成的 app.icns（没有则跳过），
+Linux 不传图标（AppImage 由外层 desktop 文件指定图标）。
+"""
 
 import importlib.util
 import os
+import sys
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 
 # pykakasi 自带 9MB 左右的词典数据（pykakasi/data/*.db），官方没提供 PyInstaller
 # 钩子，必须显式收进来；没装 pykakasi 时保持空列表，不影响打包。
-# 应用图标同时给 exe 和运行时的窗口用：datas 把它放进 _internal/lyrics_transcriber/assets，
+# 应用资源（含 Windows 图标）放进 _internal/lyrics_transcriber/assets，
 # gui 里按 __file__ 同级的 assets 目录去找，源码运行和打包后都能命中。
 assets_dir = os.path.join(ROOT, "lyrics_transcriber", "assets")
-icon_path = os.path.join(assets_dir, "app.ico")
+
+if sys.platform == "win32":
+    icon_path = os.path.join(assets_dir, "app.ico")
+elif sys.platform == "darwin":
+    _icns = os.path.join(assets_dir, "app.icns")
+    icon_path = _icns if os.path.exists(_icns) else None
+else:
+    icon_path = None
 
 datas = [(assets_dir, "lyrics_transcriber/assets")]
 hiddenimports = []

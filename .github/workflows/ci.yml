@@ -1,0 +1,45 @@
+name: CI
+
+# 三平台测试矩阵：每次 push main / PR 都在 Windows、macOS、Ubuntu 上跑全量 pytest。
+# Linux 的 tkinter 必须随系统 Python 安装（apt 的 python3-tk），因此 Linux 走
+# 系统 Python + venv，其余平台用 setup-python；GUI 测试在 Linux 需要虚拟显示
+# （xvfb），测试夹具本身对无显示环境有优雅跳过兜底。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: 测试 ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        if: runner.os != 'Linux'
+        with:
+          python-version: "3.13"
+
+      - name: 准备 Linux 环境（系统 Python + tkinter + 虚拟显示）
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk xvfb
+          python3 -m venv .venv
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
+      - name: 安装依赖
+        run: python -m pip install -r requirements.txt
+
+      - name: 运行测试
+        if: runner.os != 'Linux'
+        run: python -m pytest -q
+
+      - name: 运行测试（Linux，虚拟显示下跑 GUI 用例）
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python -m pytest -q

@@ -1,9 +1,9 @@
-; 歌词提取器 安装包脚本（Inno Setup 6）
+﻿; 歌词提取器 安装包脚本（Inno Setup 6）
 ; 先运行 PyInstaller 得到 dist\LyricsTranscriber\ 应用目录，再用本脚本生成 setup 安装包。
 
 #define MyAppName "歌词提取器"
 #define MyAppNameEn "LyricsTranscriber"
-#define MyAppVersion "0.5.2"
+#define MyAppVersion "0.6.0"
 #define MyAppExeName "LyricsTranscriber.exe"
 #define MyAppPublisher "good"
 
