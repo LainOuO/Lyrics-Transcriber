@@ -16,7 +16,9 @@ iconutil -c icns app.iconset -o lyrics_transcriber/assets/app.icns
 python3 -m pip install -r requirements.txt
 python3 -m PyInstaller --noconfirm --clean packaging/lyrics_transcriber.spec \
   --distpath dist --workpath build-pyinstaller
+# spec 的 BUNDLE 段在 darwin 下产出 dist/LyricsTranscriber.app
+test -d dist/LyricsTranscriber.app || { echo "没生成 .app"; exit 1; }
 hdiutil create -volname "LyricsTranscriber" \
-  -srcfolder dist/LyricsTranscriber/LyricsTranscriber.app \
+  -srcfolder dist/LyricsTranscriber.app \
   -ov -format UDZO "dist/LyricsTranscriber-v${VERSION}-macOS.dmg"
 echo "完成：dist/LyricsTranscriber-v${VERSION}-macOS.dmg"

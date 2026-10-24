@@ -56,8 +56,10 @@ jobs:
           choco install innosetup -y --no-progress
           python -m PyInstaller --noconfirm --clean packaging/lyrics_transcriber.spec --distpath dist --workpath build-pyinstaller
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging/installer.iss
-          $src = "dist\installer\歌词提取器-安装包-v$env:VERSION.exe"
-          $dst = "dist\installer\LyricsTranscriber-Setup-$env:VERSION.exe"
+          # tag 名带 v 前缀，installer.iss 里的版本号不带——拼文件名前先剥掉
+          $ver = $env:VERSION -replace '^v', ''
+          $src = "dist\installer\歌词提取器-安装包-v$ver.exe"
+          $dst = "dist\installer\LyricsTranscriber-Setup-v$ver.exe"
           if (-not (Test-Path $src)) { throw "Inno 没产出预期文件：$src" }
           Move-Item $src $dst
           "附件：$dst"
@@ -77,9 +79,10 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           python -m PyInstaller --noconfirm --clean packaging/lyrics_transcriber.spec --distpath dist --workpath build-pyinstaller
-          test -d dist/LyricsTranscriber/LyricsTranscriber.app || { echo "没生成 .app"; ls -R dist | head -30; exit 1; }
+          # spec 里的 BUNDLE 段在 darwin 下产出 dist/LyricsTranscriber.app
+          test -d dist/LyricsTranscriber.app || { echo "没生成 .app"; ls -R dist | head -30; exit 1; }
           hdiutil create -volname "LyricsTranscriber" \
-            -srcfolder dist/LyricsTranscriber/LyricsTranscriber.app \
+            -srcfolder dist/LyricsTranscriber.app \
             -ov -format UDZO "dist/LyricsTranscriber-$VERSION-macOS.dmg"
 
       # ---------------- Linux：onedir → AppImage ----------------

@@ -80,3 +80,14 @@ coll = COLLECT(
     upx=False,
     name="LyricsTranscriber",
 )
+
+if sys.platform == "darwin":
+    # macOS 必须显式 BUNDLE 才会产出 dist/LyricsTranscriber.app；
+    # 没有这段时只生成普通目录（不带 .app 外壳，无法拖进应用程序）
+    app = BUNDLE(
+        coll,
+        exe,
+        name="LyricsTranscriber.app",
+        icon=icon_path,
+        bundle_identifier="com.good.lyricstranscriber",
+    )
