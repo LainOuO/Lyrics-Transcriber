@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-import numpy as np
 import pytest
 
 from lyrics_transcriber import vocal_sep
@@ -21,7 +20,8 @@ class FakeSeparator:
 
     def separate_audio_file(self, path):
         FakeSeparator.calls.append(path)
-        return None, {"vocals": np.zeros((2, 100), dtype="float32")}
+        # 假音频数据用普通列表即可：测试里 soundfile 也被替身接管，不会真做运算
+        return None, {"vocals": [[0.0] * 100, [0.0] * 100]}
 
 
 @pytest.fixture
@@ -44,7 +44,7 @@ def fake_soundfile(monkeypatch):
     written = []
     fake = SimpleNamespace(
         read=lambda path, always_2d=True: (
-            np.zeros((4, 2), dtype="float32"), 44100),
+            [[0.0, 0.0]] * 4, 44100),
         write=lambda path, data, sr, format=None: written.append(str(path)),
     )
     monkeypatch.setitem(sys.modules, "soundfile", fake)
@@ -101,7 +101,7 @@ def test_failure_returns_none_and_cleans_up(
 def test_missing_vocals_stem_returns_none(fake_demucs, fake_soundfile, monkeypatch, tmp_path):
     monkeypatch.setattr(
         FakeSeparator, "separate_audio_file",
-        lambda self, path: (None, {"drums": np.zeros((2, 8))}),
+        lambda self, path: (None, {"drums": [[0.0] * 8] * 2}),
     )
     src = tmp_path / "s.wav"
     src.write_bytes(b"RIFF")

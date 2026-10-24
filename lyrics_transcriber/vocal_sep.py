@@ -104,6 +104,6 @@ def _write_mono_flac(tensor, samplerate: int, out: Path) -> None:
             mono = tensor.detach().cpu().numpy()
     except ImportError:
         pass  # demucs 正常安装必然带 torch，这里只是防御性兜底
-    if mono.ndim == 2:
+    if getattr(mono, "ndim", 1) == 2:
         mono = mono.mean(axis=0)
     sf.write(str(out), mono, samplerate, format="FLAC")
