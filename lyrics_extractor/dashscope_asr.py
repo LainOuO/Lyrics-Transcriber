@@ -248,23 +248,36 @@ def _fetch_transcription_json(url: str) -> dict:
 
 
 def _to_words(sentences: list) -> list[dict]:
-    """百炼 sentences → 拼行用的词列表：词文本带上随附标点，毫秒 → 秒。"""
+    """百炼 sentences → 拼行用的词列表：词文本带上随附标点，毫秒 → 秒。
+
+    每句的第一个词带上 ``sentence_start`` 标记——转写服务自带的句子划分
+    比客户端的停顿/行宽猜测准得多，拼行时优先按它断。
+    """
     words: list[dict] = []
     for sentence in sentences:
         if not isinstance(sentence, dict):
             continue
         parts = sentence.get("words") or []
+        sentence_started = False  # 本句可能开头的空词被跳过后，标记落到首个实词
         if parts:
+
+            def _mark(entry: dict) -> dict:
+                nonlocal sentence_started
+                if not sentence_started:
+                    entry["sentence_start"] = True
+                    sentence_started = True
+                return entry
+
             for word in parts:
                 text = str(word.get("text") or "").strip()
                 if not text:
                     continue
                 punct = str(word.get("punctuation") or "")
-                words.append({
+                words.append(_mark({
                     "word": text + punct,
                     "start": (word.get("begin_time") or 0) / 1000,
                     "end": (word.get("end_time") or 0) / 1000,
-                })
+                }))
         else:
             # 没有词级时间戳时退回句级：一句一行，行时间 = 句子开始
             text = str(sentence.get("text") or "").strip()
@@ -273,6 +286,7 @@ def _to_words(sentences: list) -> list[dict]:
                     "word": text,
                     "start": (sentence.get("begin_time") or 0) / 1000,
                     "end": (sentence.get("end_time") or 0) / 1000,
+                    "sentence_start": True,
                 })
     return words
 

@@ -3,10 +3,19 @@
 依赖 ``demucs`` 与 ``torch``（pip 安装，体积约 1GB 级），未安装时自动跳过——
 人声分离只是提升转写准确率的锦上添花，绝不该挡住主流程。分离结果写成单声道
 FLAC（比原曲小得多，方便上传），放在临时目录里，用完由调用方整体删掉。
+
+实测踩过的两个坑（2026-10，本机验证）：
+
+- demucs 对非 WAV 输入会调 ffmpeg 子进程，本机未必装了 ffmpeg——先用
+  soundfile 把输入转成 WAV 再喂给它，绕开这个依赖；
+- demucs 加载模型时先连 huggingface.co 校验元数据，该域名在部分网络下不通，
+  每次要白等 5 次超时重试（约 5 分钟）才回退到 Meta 的 CDN。设
+  ``HF_HUB_OFFLINE=1`` 让它立即走回退/缓存，模型照常能拿到。
 """
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -30,6 +39,22 @@ def is_available() -> bool:
     return True
 
 
+def _to_wav(path: Path, work_dir: Path, log) -> Path:
+    """demucs 只对 WAV 免 ffmpeg；其余格式先用 soundfile 转一道。
+
+    FLAC / MP3 / OGG 等 soundfile 都能读，转出来的 WAV 放在临时目录里。
+    """
+    if path.suffix.lower() == ".wav":
+        return path
+    import soundfile as sf
+
+    wav = work_dir / (path.stem + "-input.wav")
+    data, samplerate = sf.read(str(path), always_2d=True)
+    sf.write(str(wav), data, samplerate)
+    log(f"已将 {path.suffix.lstrip('.').upper()} 转为 WAV 供人声分离")
+    return wav
+
+
 def separate_vocals(path, log=None) -> tuple[Path, Path] | None:
     """分离人声，返回 (人声 FLAC, 临时目录)；没装依赖或分离失败时返回 None。
 
@@ -40,13 +65,17 @@ def separate_vocals(path, log=None) -> tuple[Path, Path] | None:
         log("未安装 Demucs（人声分离增强），直接转写原音频")
         return None
 
+    # huggingface.co 在部分网络下不通：离线模式让 demucs 立即走 Meta CDN
+    # 回退或本地缓存，省掉 5 次超时重试的几分钟白等
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
     from demucs.api import Separator
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="lyrics_vocals_"))
     done = False
     try:
         separator = Separator(model=DEMUCS_MODEL, device="cpu", progress=False)
-        _origin, separated = separator.separate_audio_file(str(path))
+        wav = _to_wav(Path(path), tmp_dir, log)
+        _origin, separated = separator.separate_audio_file(str(wav))
         vocals = separated.get("vocals")
         if vocals is None:
             log("Demucs 没有产出人声轨，改用原音频转写")

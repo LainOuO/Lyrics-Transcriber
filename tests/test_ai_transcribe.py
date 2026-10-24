@@ -85,6 +85,20 @@ def test_words_split_on_phrase_gap():
     assert result.lines == [(1000, "第一句"), (5000, "第二句")]
 
 
+def test_words_split_on_sentence_boundary_marker():
+    """转写服务给的句子划分比停顿/行宽猜测准：带 sentence_start 的词另起新行。
+
+    对比实验发现：只靠停顿+行宽会把一个词劈成两行（"寂/しさ"），
+    服务端的句子边界能避免这种硬切。
+    """
+    result = build_lines(words=[
+        word("寂し", 1.0, 1.4), word("さを", 1.5, 1.8), word("知った", 1.9, 2.2),
+        {**word("新的", 2.3, 2.6), "sentence_start": True},
+        word("一句", 2.7, 3.0),
+    ])
+    assert result.lines == [(1000, "寂しさを知った"), (2300, "新的一句")]
+
+
 def test_words_split_on_line_weight():
     # 16 个汉字（weight 32 > 上限 30）应断成两行：前 15 个一行，第 16 个另一行
     chars = [word("字", 1.0 + i * 0.5) for i in range(16)]

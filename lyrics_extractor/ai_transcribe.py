@@ -102,7 +102,12 @@ def _drop_consecutive_duplicates(
 
 
 def _group_words(words: list[dict]) -> list[tuple[int, str]]:
-    """词级时间戳 → 歌词行：按句末标点、乐句停顿、行宽上限断行。"""
+    """词级时间戳 → 歌词行。
+
+    断行优先级：句边界（转写服务自带的句子划分，词表里以 ``sentence_start``
+    标记）> 句末标点 > 乐句停顿 > 行宽上限。没有句边界标记时（部分服务不给），
+    退化为后三条规则。
+    """
     lines: list[tuple[int, str]] = []
     current: list[str] = []
     current_start = 0
@@ -120,7 +125,8 @@ def _group_words(words: list[dict]) -> list[tuple[int, str]]:
                 lines[-1] = (lines[-1][0], (lines[-1][1] + token).strip())
             continue
         flush = current and (
-            _ends_sentence(current[-1])
+            word.get("sentence_start")
+            or _ends_sentence(current[-1])
             or (prev_end is not None and start - prev_end > PHRASE_GAP_MS)
             or _weight("".join(current)) + _weight(token) > MAX_LINE_WEIGHT
         )

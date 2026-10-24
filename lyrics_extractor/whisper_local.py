@@ -37,9 +37,15 @@ def transcribe_local(path, settings: Settings) -> Transcription:
     except Exception as exc:  # ffmpeg 缺失、音频解码失败、内存不足等
         raise TranscribeError(f"本机转写失败: {exc}") from exc
 
-    words = [
-        word
-        for segment in result.get("segments", [])
-        for word in segment.get("words", [])
-    ]
+    words = []
+    for segment in result.get("segments", []):
+        segment_words = [
+            word for word in segment.get("words", [])
+            if str(word.get("word") or "").strip()
+        ]
+        for index, word in enumerate(segment_words):
+            entry = dict(word)
+            if index == 0:
+                entry["sentence_start"] = True  # 拼行时优先按分段边界断行
+            words.append(entry)
     return build_lines(words=words, text=result.get("text") or "")

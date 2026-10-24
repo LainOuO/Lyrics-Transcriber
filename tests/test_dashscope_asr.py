@@ -122,7 +122,7 @@ def paraformer_flow(fake_net, *, poll_responses=None, result=None):
 def test_paraformer_words_become_synced_lines(audio, fake_net, no_sleep_no_dns):
     calls = paraformer_flow(fake_net)
     result = transcribe_paraformer(audio, Settings(api_key="sk-dash"))
-    # 词带随附标点：句子内不断行，两句各自成行
+    # 词带随附标点：句子内不断行，两句各自成行（句边界标记生效）
     assert result.lines == [(1000, "第一，句"), (5000, "第二句")]
     # 关键请求头与模型都要对：异步任务 + oss:// 地址解析
     create = next(c for c in calls if "/services/audio/asr/transcription" in c["url"])
@@ -134,6 +134,27 @@ def test_paraformer_words_become_synced_lines(audio, fake_net, no_sleep_no_dns):
     resolved = {host for host in no_sleep_no_dns["resolved"]}
     assert "dashscope-file-test.oss-cn-beijing.aliyuncs.com" in resolved
     assert "dashscope-result-test.oss-cn-beijing.aliyuncs.com" in resolved
+
+
+def test_to_words_marks_sentence_boundaries():
+    """每句第一个词要带 sentence_start 标记（拼行优先按句子边界断行）。"""
+    from lyrics_extractor.dashscope_asr import _to_words
+
+    words = _to_words([
+        {"text": "一句", "begin_time": 1000, "end_time": 1500,
+         "words": [{"text": "一", "begin_time": 1000, "end_time": 1200},
+                   {"text": "句", "punctuation": "，", "begin_time": 1200,
+                    "end_time": 1500}]},
+        {"text": "二句", "begin_time": 3000, "end_time": 3500,
+         "words": [{"text": "", "begin_time": 3000, "end_time": 3100},  # 空词跳过
+                   {"text": "二", "begin_time": 3100, "end_time": 3300},
+                   {"text": "句", "begin_time": 3300, "end_time": 3500}]},
+    ])
+    # 句首标记落在每句首个实词上（空词被跳过也不影响）
+    assert words[0].get("sentence_start") is True
+    assert words[1].get("sentence_start") is None
+    assert words[2].get("sentence_start") is True  # 空词之后的"二"扛标记
+    assert words[3].get("sentence_start") is None
 
 
 def test_paraformer_sentence_fallback_without_words(audio, fake_net):
