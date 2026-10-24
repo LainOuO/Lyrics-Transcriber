@@ -21,7 +21,7 @@ from pathlib import Path
 
 import requests
 
-from lyrics_extractor.settings import (
+from lyrics_transcriber.settings import (
     ENGINE_LOCAL,
     PROVIDER_DASHSCOPE,
     Settings,
@@ -317,7 +317,7 @@ def transcribe_cloud(path, settings: Settings, timeout: float | None = None) -> 
 
 def transcribe_audio(path, settings: Settings | None, log=None) -> Transcription:
     """AI 听歌转写主入口；``settings`` 为空时按默认云端配置（缺密钥会报错提示）。"""
-    from lyrics_extractor import vocal_sep, whisper_local
+    from lyrics_transcriber import vocal_sep, whisper_local
 
     settings = settings or Settings()
     log = log or (lambda msg: None)
@@ -333,7 +333,7 @@ def transcribe_audio(path, settings: Settings | None, log=None) -> Transcription
             return whisper_local.transcribe_local(source, settings)
         if settings.provider == PROVIDER_DASHSCOPE:
             # 懒加载：dashscope_asr 反向引用本模块的类型与拼行逻辑
-            from lyrics_extractor import dashscope_asr
+            from lyrics_transcriber import dashscope_asr
 
             return dashscope_asr.transcribe(source, settings)
         return transcribe_cloud(source, settings)

@@ -1,10 +1,10 @@
 ; 歌词提取器 安装包脚本（Inno Setup 6）
-; 先运行 PyInstaller 得到 dist\LyricsExtractor\ 应用目录，再用本脚本生成 setup 安装包。
+; 先运行 PyInstaller 得到 dist\LyricsTranscriber\ 应用目录，再用本脚本生成 setup 安装包。
 
 #define MyAppName "歌词提取器"
-#define MyAppNameEn "LyricsExtractor"
-#define MyAppVersion "0.5.1"
-#define MyAppExeName "LyricsExtractor.exe"
+#define MyAppNameEn "LyricsTranscriber"
+#define MyAppVersion "0.5.2"
+#define MyAppExeName "LyricsTranscriber.exe"
 #define MyAppPublisher "good"
 
 [Setup]
@@ -33,7 +33,7 @@ Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 Name: "desktopicon"; Description: "创建桌面快捷方式(&D)"; GroupDescription: "附加任务："
 
 [Files]
-Source: "..\dist\LyricsExtractor\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\LyricsTranscriber\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

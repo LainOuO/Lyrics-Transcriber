@@ -1,5 +1,5 @@
-from lyrics_extractor import lrc_writer
-from lyrics_extractor.lrc_writer import build_lrc, format_timestamp, parse_lrc_text
+from lyrics_transcriber import lrc_writer
+from lyrics_transcriber.lrc_writer import build_lrc, format_timestamp, parse_lrc_text
 
 
 def test_parse_lrc_text_synced():

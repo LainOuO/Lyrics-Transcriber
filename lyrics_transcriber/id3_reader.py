@@ -1,14 +1,14 @@
 """用 mutagen 读取 ID3 标签与内嵌歌词（SYLT 同步歌词 / USLT 非同步歌词）。
 
 mp3 直接使用本模块；wav / aiff 等容器内嵌的 ID3 也复用同一套逻辑
-（见 :mod:`lyrics_extractor.audio_file`）。
+（见 :mod:`lyrics_transcriber.audio_file`）。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from lyrics_extractor.lrc_writer import parse_lrc_text
+from lyrics_transcriber.lrc_writer import parse_lrc_text
 from mutagen.mp3 import MP3
 
 

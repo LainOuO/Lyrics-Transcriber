@@ -7,10 +7,10 @@ from dataclasses import dataclass
 
 import requests
 
-from lyrics_extractor import __version__
+from lyrics_transcriber import __version__
 
 LRCLIB_BASE = "https://lrclib.net/api"
-USER_AGENT = f"LyricsExtractor/{__version__} (personal lyrics tool)"
+USER_AGENT = f"LyricsTranscriber/{__version__} (personal lyrics tool)"
 DEFAULT_TIMEOUT = 10.0
 # 搜索结果与本地文件时长的容差（秒），用于排除 Live/Remix 等错误版本
 DURATION_TOLERANCE = 3.0

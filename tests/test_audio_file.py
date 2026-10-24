@@ -2,8 +2,8 @@
 
 import pytest
 
-from lyrics_extractor import audio_file
-from lyrics_extractor.audio_file import (
+from lyrics_transcriber import audio_file
+from lyrics_transcriber.audio_file import (
     AudioError,
     load_audio,
     read_embedded_lyrics,

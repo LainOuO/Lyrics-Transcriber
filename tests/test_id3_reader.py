@@ -1,4 +1,4 @@
-from lyrics_extractor import id3_reader
+from lyrics_transcriber import id3_reader
 
 
 def test_read_tags(mp3_factory):

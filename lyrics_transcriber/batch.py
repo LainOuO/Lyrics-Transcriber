@@ -6,8 +6,8 @@ import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from lyrics_extractor.audio_file import SUPPORTED_EXTENSIONS
-from lyrics_extractor.extractor import LyricsExtractor, Status
+from lyrics_transcriber.audio_file import SUPPORTED_EXTENSIONS
+from lyrics_transcriber.extractor import LyricsTranscriber, Status
 
 
 def scan_audio_files(folder, recursive: bool = True) -> list[Path]:
@@ -88,7 +88,7 @@ def run_files(
     }
     if timeout is not None:
         kwargs["timeout"] = timeout
-    extractor = LyricsExtractor(**kwargs)
+    extractor = LyricsTranscriber(**kwargs)
 
     counters = {
         Status.SYNCED: "synced",

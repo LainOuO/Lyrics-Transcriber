@@ -3,8 +3,8 @@ import sys
 import pytest
 import requests
 
-from lyrics_extractor import online
-from lyrics_extractor.online import OnlineError, fetch_lyrics
+from lyrics_transcriber import online
+from lyrics_transcriber.online import OnlineError, fetch_lyrics
 
 
 class FakeResp:
@@ -92,7 +92,7 @@ def test_get_exact_hit(fake_api):
     assert call["params"]["track_name"] == "晴天"
     assert call["params"]["album_name"] == "叶惠美"
     assert call["params"]["duration"] == "269"
-    assert "LyricsExtractor/" in call["headers"]["User-Agent"]
+    assert "LyricsTranscriber/" in call["headers"]["User-Agent"]
 
 
 def test_get_404_falls_back_to_search(fake_api):

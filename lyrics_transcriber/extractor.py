@@ -1,6 +1,6 @@
 """单文件处理流水线：读内嵌歌词 → 在线兜底 → AI 听歌转写 → 写 LRC。
 
-格式无关：通过 :mod:`lyrics_extractor.audio_file` 统一读取标签与内嵌歌词，
+格式无关：通过 :mod:`lyrics_transcriber.audio_file` 统一读取标签与内嵌歌词，
 支持 mp3 / flac / wav / m4a / mp4 / aac / ogg / opus / wma / ape / aiff。
 """
 
@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from lyrics_extractor import (
+from lyrics_transcriber import (
     ai_transcribe,
     audio_file,
     lrc_writer,
@@ -46,7 +46,7 @@ class ExtractResult:
         return self.status in (Status.SYNCED, Status.PLAIN)
 
 
-class LyricsExtractor:
+class LyricsTranscriber:
     def __init__(
         self,
         overwrite: bool = False,

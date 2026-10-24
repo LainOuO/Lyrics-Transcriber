@@ -2,10 +2,10 @@ import pytest
 
 tkinter = pytest.importorskip("tkinter")
 
-from lyrics_extractor import batch
-from lyrics_extractor.batch import RunSummary
-from lyrics_extractor.extractor import Status
-from lyrics_extractor.gui import MODE_FILE, MODE_FOLDER, App
+from lyrics_transcriber import batch
+from lyrics_transcriber.batch import RunSummary
+from lyrics_transcriber.extractor import Status
+from lyrics_transcriber.gui import MODE_FILE, MODE_FOLDER, App
 
 
 @pytest.fixture(scope="module")
@@ -33,15 +33,15 @@ def app(tk_root, monkeypatch):
     # 弹窗一律替换为记录，避免模态对话框阻塞测试
     dialogs = []
     monkeypatch.setattr(
-        "lyrics_extractor.gui.messagebox.showwarning",
+        "lyrics_transcriber.gui.messagebox.showwarning",
         lambda *a, **k: dialogs.append(("warning", a)),
     )
     monkeypatch.setattr(
-        "lyrics_extractor.gui.messagebox.showerror",
+        "lyrics_transcriber.gui.messagebox.showerror",
         lambda *a, **k: dialogs.append(("error", a)),
     )
     monkeypatch.setattr(
-        "lyrics_extractor.gui.messagebox.showinfo",
+        "lyrics_transcriber.gui.messagebox.showinfo",
         lambda *a, **k: dialogs.append(("info", a)),
     )
     gui._dialogs = dialogs
@@ -113,11 +113,11 @@ def test_mode_change_is_noop_for_same_mode(app):
 def test_browse_uses_file_dialog_in_file_mode(app, monkeypatch):
     chosen = {}
     monkeypatch.setattr(
-        "lyrics_extractor.gui.filedialog.askopenfilename",
+        "lyrics_transcriber.gui.filedialog.askopenfilename",
         lambda **kwargs: chosen.update(kwargs) or r"D:\歌单\晴天.mp3",
     )
     monkeypatch.setattr(
-        "lyrics_extractor.gui.filedialog.askdirectory",
+        "lyrics_transcriber.gui.filedialog.askdirectory",
         lambda **kwargs: pytest.fail("单文件模式不该弹目录选择框"),
     )
     app.mode_var.set(MODE_FILE)
@@ -129,11 +129,11 @@ def test_browse_uses_file_dialog_in_file_mode(app, monkeypatch):
 
 def test_browse_uses_directory_dialog_in_folder_mode(app, monkeypatch):
     monkeypatch.setattr(
-        "lyrics_extractor.gui.filedialog.askdirectory",
+        "lyrics_transcriber.gui.filedialog.askdirectory",
         lambda **kwargs: r"D:\歌单",
     )
     monkeypatch.setattr(
-        "lyrics_extractor.gui.filedialog.askopenfilename",
+        "lyrics_transcriber.gui.filedialog.askopenfilename",
         lambda **kwargs: pytest.fail("文件夹模式不该弹文件选择框"),
     )
     app._browse()
@@ -301,14 +301,14 @@ import threading
 import time
 from pathlib import Path
 
-from lyrics_extractor import settings as settings_module
-from lyrics_extractor.gui import (
+from lyrics_transcriber import settings as settings_module
+from lyrics_transcriber.gui import (
     AiPickerDialog,
     AiPreviewDialog,
     AiSettingsDialog,
     PreviewBridge,
 )
-from lyrics_extractor.settings import ENGINE_CLOUD, ENGINE_LOCAL, Settings
+from lyrics_transcriber.settings import ENGINE_CLOUD, ENGINE_LOCAL, Settings
 
 
 def test_ai_widgets_default_state(app):

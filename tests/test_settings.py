@@ -1,4 +1,4 @@
-from lyrics_extractor.settings import (
+from lyrics_transcriber.settings import (
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
     ENGINE_CLOUD,

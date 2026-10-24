@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from lyrics_extractor import APP_NAME, __version__
+from lyrics_transcriber import APP_NAME, __version__
 
 # 行首 LRC 时间戳 [mm:ss]、[mm:ss.xx]、[mm:ss.xxx]，允许一行多个
 _LRC_STAMP = re.compile(r"\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]")

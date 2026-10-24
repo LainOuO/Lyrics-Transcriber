@@ -1,7 +1,7 @@
 import threading
 
-from lyrics_extractor.audio_file import SUPPORTED_EXTENSIONS
-from lyrics_extractor.batch import (
+from lyrics_transcriber.audio_file import SUPPORTED_EXTENSIONS
+from lyrics_transcriber.batch import (
     export_failure_report,
     is_supported_audio,
     run_batch,
@@ -280,8 +280,8 @@ def test_run_files_passes_ai_options_to_extractor(tmp_path, mp3_factory, monkeyp
     """界面勾选的 AI 选项要原样传到流水线。"""
     from pathlib import Path as _Path
 
-    from lyrics_extractor import batch as batch_mod
-    from lyrics_extractor.extractor import ExtractResult, Status
+    from lyrics_transcriber import batch as batch_mod
+    from lyrics_transcriber.extractor import ExtractResult, Status
 
     seen = {}
 
@@ -292,7 +292,7 @@ def test_run_files_passes_ai_options_to_extractor(tmp_path, mp3_factory, monkeyp
         def process(self, path):
             return ExtractResult(_Path(path), Status.NOT_FOUND)
 
-    monkeypatch.setattr(batch_mod, "LyricsExtractor", FakeExtractor)
+    monkeypatch.setattr(batch_mod, "LyricsTranscriber", FakeExtractor)
     target = mp3_factory(name="bare.mp3")
     run_files(
         [target], use_online=False, use_ai=True,
@@ -309,8 +309,8 @@ def test_run_files_passes_ai_options_to_extractor(tmp_path, mp3_factory, monkeyp
 
 
 def test_run_batch_forwards_ai_options(tmp_path, mp3_factory, monkeypatch):
-    from lyrics_extractor import batch as batch_mod
-    from lyrics_extractor.batch import RunSummary
+    from lyrics_transcriber import batch as batch_mod
+    from lyrics_transcriber.batch import RunSummary
 
     seen = {}
 
@@ -328,7 +328,7 @@ def test_run_batch_forwards_ai_options(tmp_path, mp3_factory, monkeypatch):
 
 def test_run_files_ai_fallback_writes_lrc_end_to_end(tmp_path, mp3_factory, monkeypatch):
     """全链路：无内嵌无在线 → AI 转写 → 写出带时间轴的 .lrc。"""
-    from lyrics_extractor import ai_transcribe
+    from lyrics_transcriber import ai_transcribe
 
     target = mp3_factory(name="bare.mp3")
     monkeypatch.setattr(

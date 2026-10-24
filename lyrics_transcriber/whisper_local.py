@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from lyrics_extractor.ai_transcribe import Transcription, TranscribeError, build_lines
-from lyrics_extractor.settings import Settings
+from lyrics_transcriber.ai_transcribe import Transcription, TranscribeError, build_lines
+from lyrics_transcriber.settings import Settings
 
 # 同一型号只加载一次；批量转写时省去每个文件反复加载模型的等待
 _MODELS: dict[str, object] = {}

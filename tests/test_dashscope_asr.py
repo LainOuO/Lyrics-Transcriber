@@ -4,15 +4,15 @@ import socket
 
 import pytest
 
-import lyrics_extractor.dashscope_asr as ds
-from lyrics_extractor.dashscope_asr import (
+import lyrics_transcriber.dashscope_asr as ds
+from lyrics_transcriber.dashscope_asr import (
     TranscribeError,
     _guard_aliyun_url,
     _guard_fixed_url,
     transcribe,
     transcribe_paraformer,
 )
-from lyrics_extractor.settings import Settings
+from lyrics_transcriber.settings import Settings
 
 UPLOAD_HOST = "https://dashscope-file-test.oss-cn-beijing.aliyuncs.com"
 RESULT_URL = "https://dashscope-result-test.oss-cn-beijing.aliyuncs.com/r.json"
@@ -138,7 +138,7 @@ def test_paraformer_words_become_synced_lines(audio, fake_net, no_sleep_no_dns):
 
 def test_to_words_marks_sentence_boundaries():
     """每句第一个词要带 sentence_start 标记（拼行优先按句子边界断行）。"""
-    from lyrics_extractor.dashscope_asr import _to_words
+    from lyrics_transcriber.dashscope_asr import _to_words
 
     words = _to_words([
         {"text": "一句", "begin_time": 1000, "end_time": 1500,

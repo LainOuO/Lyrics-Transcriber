@@ -2,7 +2,7 @@
 
 ## 产物形态
 
-和市面软件一样：`setup.exe` 安装向导 → 装进 `C:\Program Files\LyricsExtractor\`
+和市面软件一样：`setup.exe` 安装向导 → 装进 `C:\Program Files\LyricsTranscriber\`
 （主 exe + `_internal` 依赖目录）→ 开始菜单/桌面快捷方式 → 控制面板可卸载。
 
 当前版本 **v0.3.0**，支持 mp3 / flac / wav / m4a / mp4 / aac / ogg / opus / wma / ape / aiff。
@@ -15,17 +15,17 @@ packaging\build_exe.bat
 
 脚本做两件事：
 
-1. **PyInstaller**（onedir 模式）把 Python 程序打包成应用目录 `dist\LyricsExtractor\`；
+1. **PyInstaller**（onedir 模式）把 Python 程序打包成应用目录 `dist\LyricsTranscriber\`；
 2. 找到 **Inno Setup 6** 后，用 `packaging\installer.iss` 把应用目录打成
    `dist\installer\歌词提取器-安装包-v0.3.0.exe`。
 
-没装 Inno Setup 时第 2 步自动跳过，仍可直接运行 `dist\LyricsExtractor\LyricsExtractor.exe` 试用。
+没装 Inno Setup 时第 2 步自动跳过，仍可直接运行 `dist\LyricsTranscriber\LyricsTranscriber.exe` 试用。
 
 ## 依赖
 
 - Python + `requirements.txt`（含 pyinstaller）
 - `pykakasi` 自带约 10MB 的词典数据（`pykakasi/data/*.db`），官方没有 PyInstaller 钩子，
-  因此 `lyrics_extractor.spec` 里显式做了 `collect_data_files("pykakasi")`；
+  因此 `lyrics_transcriber.spec` 里显式做了 `collect_data_files("pykakasi")`；
   **没装 pykakasi 时 spec 会自动跳过这一项，不影响打包**（只是打包出来的程序少了罗马字兜底查询）。
 - [Inno Setup 6](https://jrsoftware.org/isinfo.php)（只生成安装包时需要，装在任意位置均可，
   脚本会自动查找系统/用户安装目录）。
@@ -35,16 +35,16 @@ packaging\build_exe.bat
 ## 手动分步执行
 
 ```bat
-python -m PyInstaller --noconfirm --clean packaging\lyrics_extractor.spec --distpath dist --workpath build\pyinstaller
+python -m PyInstaller --noconfirm --clean packaging\lyrics_transcriber.spec --distpath dist --workpath build\pyinstaller
 "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\installer.iss
 ```
 
 ## 注意事项
 
-- 应用图标是 `lyrics_extractor/assets/app.ico`：spec 里既把它塞进 exe（资源管理器/快捷方式显示），
-  又通过 `datas` 放进 `_internal/lyrics_extractor/assets/`（运行时窗口图标用）。
+- 应用图标是 `lyrics_transcriber/assets/app.ico`：spec 里既把它塞进 exe（资源管理器/快捷方式显示），
+  又通过 `datas` 放进 `_internal/lyrics_transcriber/assets/`（运行时窗口图标用）。
   要换图标改 `packaging/make_icon.py` 后重跑一次即可（只有该脚本依赖 Pillow，程序本身不依赖）。
-- 发布新版本时，同步改 `installer.iss` 顶部的 `MyAppVersion` 和 `lyrics_extractor/__init__.py` 的 `__version__`。
+- 发布新版本时，同步改 `installer.iss` 顶部的 `MyAppVersion` 和 `lyrics_transcriber/__init__.py` 的 `__version__`。
 - `AppId` 是应用的唯一标识，保持不变才能"覆盖安装/升级"，不要改动。
 - 未做数字签名，首次运行/安装时 Windows SmartScreen 可能提示"未知发布者"，属正常现象；
   需要消除提示需购买代码签名证书（个人使用可忽略）。

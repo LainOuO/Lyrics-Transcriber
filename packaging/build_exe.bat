@@ -1,38 +1,40 @@
 @echo off
-rem ä¸€é”®æ‰“åŒ…ï¼šPyInstaller ç”Ÿæˆåº”ç”¨ç›®å½•ï¼›è‹¥è£…æœ‰ Inno Setup 6ï¼Œåˆ™ç»§ç»­ç”Ÿæˆ setup å®‰è£…åŒ…
+rem Ò»¼ü´ò°ü£ºPyInstaller Éú³ÉÓ¦ÓÃÄ¿Â¼£»Èô×°ÓĞ Inno Setup 6£¬Ôò¼ÌĞøÉú³É setup °²×°°ü
+rem ×¢Òâ£º±¾ÎÄ¼ş±ØĞë±£´æÎª GBK£¨ANSI£©±àÂë¡ª¡ªcmd °´ 936 ´úÂëÒ³½âÎö bat£¬
+rem UTF-8£¨ÎŞÂÛÓĞÎŞ BOM£©»áÈÃÖĞÎÄĞĞ±»½Ø¶Ï³ÉËéÆ¬ÃüÁîÖ´ĞĞ¡£push.bat Í¬Àí¡£
 setlocal
 cd /d "%~dp0.."
 
-rem æ‰¾ä¸€ä¸ªè£…äº† PyInstaller çš„è§£é‡Šå™¨ï¼šä¼˜å…ˆ Windows å¯åŠ¨å™¨ py -3ï¼Œå…¶æ¬¡ PATH é‡Œçš„ python
+rem ÕÒÒ»¸ö×°ÁË PyInstaller µÄ½âÊÍÆ÷£ºÓÅÏÈ Windows Æô¶¯Æ÷ py -3£¬Æä´Î PATH ÀïµÄ python
 set "PY=py -3"
 %PY% -c "import PyInstaller" >nul 2>&1
 if errorlevel 1 set "PY=python"
 %PY% -c "import PyInstaller" >nul 2>&1
 if errorlevel 1 (
-    echo æœªæ‰¾åˆ°å¯ç”¨çš„ Pythonï¼Œæˆ–è¯¥ç¯å¢ƒæœªå®‰è£… PyInstallerã€‚
-    echo è¯·å…ˆè¿è¡Œï¼špython -m pip install -r requirements.txt
+    echo Î´ÕÒµ½¿ÉÓÃµÄ Python£¬»ò¸Ã»·¾³Î´°²×° PyInstaller¡£
+    echo ÇëÏÈÔËĞĞ£ºpython -m pip install -r requirements.txt
     exit /b 1
 )
 
-echo [1/2] PyInstaller æ‰“åŒ…åº”ç”¨ç›®å½•ï¼ˆè§£é‡Šå™¨ï¼š%PY%ï¼‰...
-%PY% -m PyInstaller --noconfirm --clean packaging\lyrics_extractor.spec --distpath dist --workpath build\pyinstaller || goto :err
+echo [1/2] PyInstaller ´ò°üÓ¦ÓÃÄ¿Â¼£¨½âÊÍÆ÷£º%PY%£©...
+%PY% -m PyInstaller --noconfirm --clean packaging\lyrics_transcriber.spec --distpath dist --workpath build\pyinstaller || goto :err
 
-echo [2/2] æŸ¥æ‰¾ Inno Setup ç¼–è¯‘å™¨...
+echo [2/2] ²éÕÒ Inno Setup ±àÒëÆ÷...
 set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
 if not exist "%ISCC%" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
 if not exist "%ISCC%" set "ISCC=%LocalAppData%\Programs\Inno Setup 6\ISCC.exe"
 if not exist "%ISCC%" (
-    echo æœªæ‰¾åˆ° Inno Setup 6ï¼Œå·²è·³è¿‡å®‰è£…åŒ…ç”Ÿæˆã€‚
-    echo åº”ç”¨ç›®å½•åœ¨ dist\LyricsExtractor\ï¼Œå¯ç›´æ¥è¿è¡Œ LyricsExtractor.exe è¯•ç”¨ï¼›
-    echo å®‰è£… Inno Setup 6 åé‡æ–°è¿è¡Œæœ¬è„šæœ¬å³å¯å¾—åˆ° setup å®‰è£…åŒ…ã€‚
+    echo Î´ÕÒµ½ Inno Setup 6£¬ÒÑÌø¹ı°²×°°üÉú³É¡£
+    echo Ó¦ÓÃÄ¿Â¼ÔÚ dist\LyricsTranscriber\£¬¿ÉÖ±½ÓÔËĞĞ LyricsTranscriber.exe ÊÔÓÃ£»
+    echo °²×° Inno Setup 6 ºóÖØĞÂÔËĞĞ±¾½Å±¾¼´¿ÉµÃµ½ setup °²×°°ü¡£
     exit /b 0
 )
 "%ISCC%" packaging\installer.iss || goto :err
 echo.
-echo å®Œæˆï¼åº”ç”¨ç›®å½•ï¼šdist\LyricsExtractor\
-echo        å®‰è£…åŒ…ç›®å½•ï¼šdist\installer\ï¼ˆæ­Œè¯æå–å™¨-å®‰è£…åŒ…-v*.exeï¼Œç‰ˆæœ¬å·å–è‡ª installer.issï¼‰
+echo Íê³É£¡Ó¦ÓÃÄ¿Â¼£ºdist\LyricsTranscriber\
+echo        °²×°°üÄ¿Â¼£ºdist\installer\£¨¸è´ÊÌáÈ¡Æ÷-°²×°°ü-v*.exe£¬°æ±¾ºÅÈ¡×Ô installer.iss£©
 exit /b 0
 
 :err
-echo æ‰“åŒ…å¤±è´¥
+echo ´ò°üÊ§°Ü
 exit /b 1

@@ -49,7 +49,7 @@
 开发模式运行（需要 Python 环境）：
 
 ```bash
-python -m lyrics_extractor
+python -m lyrics_transcriber
 ```
 
 界面顶部先用「提取范围」选择处理对象，两种模式共用下面的「覆盖已有 lrc」「在线兜底」选项：
@@ -80,7 +80,7 @@ python -m lyrics_extractor
 - **隐私与限制**：云端转写会把音频文件上传给服务商（百炼经它家的临时存储中转，
   48 小时自动清理，单文件最大 1GB）。OpenAI 兼容服务商普遍限单文件 25MB
   （无损 FLAC 整轨常见超限），百炼无此限制。设置（含密钥）明文保存在本机
-  `~/.lyrics_extractor/settings.json`，不联网、不进代码仓库。
+  `~/.lyrics_transcriber/settings.json`，不联网、不进代码仓库。
 - **服务商现状**（2026-10 实测）：智谱 GLM-ASR 单次只收 30 秒音频；硅基流动已下架
   全部转写模型；Groq 的控制台网页在部分网络环境打不开（本地实测 403）——
   均不适合做默认。Qwen 系引擎暂不可用（同步版限单条 5 分钟/10MB、异步版不认
@@ -88,7 +88,7 @@ python -m lyrics_extractor
 
 ### AI 增强包（可选，进阶用户）
 
-以下增强只对**源码方式运行**（`python -m lyrics_extractor`）生效；安装版 exe
+以下增强只对**源码方式运行**（`python -m lyrics_transcriber`）生效；安装版 exe
 为了控制体积没有打包这些 1GB 级依赖，只能用云端引擎。
 
 - **本机离线转写**：`pip install whisper-timestamped`（还需要本机装有 ffmpeg），
@@ -115,7 +115,7 @@ python -m pytest
 ## 目录结构
 
 ```
-lyrics_extractor/     源码包
+lyrics_transcriber/     源码包
   audio_file.py       统一音频标签与内嵌歌词读取层（各容器适配）
   id3_reader.py       ID3 标签与 SYLT/USLT 内嵌歌词解析（mp3/wav/aiff 共用）
   lrc_writer.py       LRC 内容生成与文件写入

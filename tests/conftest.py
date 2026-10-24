@@ -17,7 +17,7 @@ from mutagen.flac import FLAC
 from mutagen.id3 import ID3, SYLT, TALB, TIT2, TPE1, USLT
 from mutagen.wave import WAVE
 
-from lyrics_extractor import audio_file
+from lyrics_transcriber import audio_file
 
 # MPEG1 Layer3, 128kbps, 44100Hz：帧长 = 144 * 128000 / 44100 = 417 字节
 MPEG_FRAME = b"\xff\xfb\x90\x00" + b"\x00" * 413

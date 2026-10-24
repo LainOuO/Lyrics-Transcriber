@@ -2,15 +2,15 @@
 
 用 mutagen 统一读取主流音频容器的标签与内嵌歌词，屏蔽各格式差异：
 
-- mp3 / wav / aiff：容器内嵌 ID3，复用 :mod:`lyrics_extractor.id3_reader` 的
+- mp3 / wav / aiff：容器内嵌 ID3，复用 :mod:`lyrics_transcriber.id3_reader` 的
   SYLT（同步歌词）> USLT（纯文本）逻辑；
 - flac / ogg / opus：VorbisComment，取 ``LYRICS`` / ``UNSYNCEDLYRICS`` 等字段；
 - m4a / mp4：``\\xa9lyr``（无同步歌词标准，纯文本）；
 - wma / asf：``WM/Lyrics``；
 - ape：APEv2 的 ``Lyrics`` 字段。
 
-统一输出 :class:`~lyrics_extractor.id3_reader.TrackTags` 与
-:class:`~lyrics_extractor.id3_reader.EmbeddedLyrics`，时长统一取 ``info.length``。
+统一输出 :class:`~lyrics_transcriber.id3_reader.TrackTags` 与
+:class:`~lyrics_transcriber.id3_reader.EmbeddedLyrics`，时长统一取 ``info.length``。
 """
 
 from __future__ import annotations
@@ -25,9 +25,9 @@ from mutagen.asf import ASFTags
 from mutagen.id3 import ID3
 from mutagen.mp4 import MP4Tags
 
-from lyrics_extractor import id3_reader
-from lyrics_extractor.id3_reader import EmbeddedLyrics, TrackTags
-from lyrics_extractor.lrc_writer import parse_lrc_text
+from lyrics_transcriber import id3_reader
+from lyrics_transcriber.id3_reader import EmbeddedLyrics, TrackTags
+from lyrics_transcriber.lrc_writer import parse_lrc_text
 
 # 支持扫描与读取的音频扩展名（小写，含点）
 SUPPORTED_EXTENSIONS = frozenset(

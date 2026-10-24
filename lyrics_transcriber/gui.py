@@ -18,11 +18,11 @@ import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from lyrics_extractor import APP_NAME, __version__, batch
-from lyrics_extractor import settings as settings_module
-from lyrics_extractor.audio_file import SUPPORTED_EXTENSIONS, SUPPORTED_EXTENSIONS_TEXT
-from lyrics_extractor.extractor import Status
-from lyrics_extractor.lrc_writer import format_timestamp, parse_lrc_text
+from lyrics_transcriber import APP_NAME, __version__, batch
+from lyrics_transcriber import settings as settings_module
+from lyrics_transcriber.audio_file import SUPPORTED_EXTENSIONS, SUPPORTED_EXTENSIONS_TEXT
+from lyrics_transcriber.extractor import Status
+from lyrics_transcriber.lrc_writer import format_timestamp, parse_lrc_text
 
 # 提取范围：整个文件夹（默认，保持老习惯）或单个文件
 MODE_FOLDER = "folder"
@@ -78,7 +78,7 @@ def _asset_path(name: str) -> Path:
     """资源路径：源码运行时在包目录下，PyInstaller 打包后在 _MEIPASS 里。"""
     base = getattr(sys, "_MEIPASS", None)
     if base:
-        return Path(base) / "lyrics_extractor" / "assets" / name
+        return Path(base) / "lyrics_transcriber" / "assets" / name
     return Path(__file__).resolve().parent / "assets" / name
 
 

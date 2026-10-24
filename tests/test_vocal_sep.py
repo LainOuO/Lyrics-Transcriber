@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from lyrics_extractor import vocal_sep
+from lyrics_transcriber import vocal_sep
 
 
 class FakeSeparator:

@@ -8,12 +8,12 @@ ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 
 # pykakasi 自带 9MB 左右的词典数据（pykakasi/data/*.db），官方没提供 PyInstaller
 # 钩子，必须显式收进来；没装 pykakasi 时保持空列表，不影响打包。
-# 应用图标同时给 exe 和运行时的窗口用：datas 把它放进 _internal/lyrics_extractor/assets，
+# 应用图标同时给 exe 和运行时的窗口用：datas 把它放进 _internal/lyrics_transcriber/assets，
 # gui 里按 __file__ 同级的 assets 目录去找，源码运行和打包后都能命中。
-assets_dir = os.path.join(ROOT, "lyrics_extractor", "assets")
+assets_dir = os.path.join(ROOT, "lyrics_transcriber", "assets")
 icon_path = os.path.join(assets_dir, "app.ico")
 
-datas = [(assets_dir, "lyrics_extractor/assets")]
+datas = [(assets_dir, "lyrics_transcriber/assets")]
 hiddenimports = []
 if importlib.util.find_spec("pykakasi"):
     from PyInstaller.utils.hooks import collect_data_files
@@ -29,7 +29,7 @@ if importlib.util.find_spec("pykakasi"):
 excludes = ["torch", "demucs", "soundfile"]
 
 a = Analysis(
-    [os.path.join(ROOT, "lyrics_extractor", "__main__.py")],
+    [os.path.join(ROOT, "lyrics_transcriber", "__main__.py")],
     pathex=[ROOT],
     binaries=[],
     datas=datas,
@@ -46,7 +46,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="LyricsExtractor",
+    name="LyricsTranscriber",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -65,5 +65,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="LyricsExtractor",
+    name="LyricsTranscriber",
 )

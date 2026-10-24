@@ -23,12 +23,12 @@ from urllib.parse import urlparse
 
 import requests
 
-from lyrics_extractor.ai_transcribe import (
+from lyrics_transcriber.ai_transcribe import (
     Transcription,
     TranscribeError,
     build_lines,
 )
-from lyrics_extractor.settings import (
+from lyrics_transcriber.settings import (
     DASHSCOPE_PARAFORMER_MODEL,
     Settings,
     clean_api_key,

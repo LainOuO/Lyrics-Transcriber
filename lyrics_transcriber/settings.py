@@ -1,6 +1,6 @@
 """本机设置（AI 转写服务商等）的持久化：明文 JSON，存在用户主目录下。
 
-密钥属于敏感信息，只写进用户自己的机器（``~/.lyrics_extractor/settings.json``），
+密钥属于敏感信息，只写进用户自己的机器（``~/.lyrics_transcriber/settings.json``），
 不进代码仓库、不随软件分发。
 """
 
@@ -29,7 +29,7 @@ PROVIDER_LABELS = {
 # 存储 oss:// 地址、qwen2-audio 不在兼容模式里），百炼放开后再接入。
 DASHSCOPE_PARAFORMER_MODEL = "paraformer-v2"
 
-SETTINGS_DIR = Path.home() / ".lyrics_extractor"
+SETTINGS_DIR = Path.home() / ".lyrics_transcriber"
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
 
 # OpenAI 兼容服务商的默认地址与模型（Groq：免费额度按音频秒数计，支持词级

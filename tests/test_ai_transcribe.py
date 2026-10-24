@@ -3,14 +3,14 @@
 import pytest
 import requests
 
-from lyrics_extractor import ai_transcribe
-from lyrics_extractor.ai_transcribe import (
+from lyrics_transcriber import ai_transcribe
+from lyrics_transcriber.ai_transcribe import (
     TranscribeError,
     build_lines,
     transcribe_cloud,
     transcriptions_url,
 )
-from lyrics_extractor.settings import (
+from lyrics_transcriber.settings import (
     ENGINE_LOCAL,
     PROVIDER_DASHSCOPE,
     PROVIDER_OPENAI,
@@ -340,7 +340,7 @@ def test_cloud_empty_text_is_empty_transcription(audio, post_api):
 @pytest.fixture
 def engines(monkeypatch, tmp_path):
     """替换人声分离与两个引擎，记录调用；默认人声分离返回 None（跳过）。"""
-    from lyrics_extractor import vocal_sep, whisper_local
+    from lyrics_transcriber import vocal_sep, whisper_local
 
     seen = {}
 
@@ -373,7 +373,7 @@ def test_dispatch_openai_provider(audio, engines):
 
 
 def test_dispatch_dashscope_provider(audio, engines, monkeypatch):
-    from lyrics_extractor import dashscope_asr
+    from lyrics_transcriber import dashscope_asr
 
     seen = engines
 
@@ -399,7 +399,7 @@ def test_dispatch_local_engine(audio, engines):
 def test_vocal_separation_feeds_engine_and_cleans_up(audio, engines, monkeypatch, tmp_path):
     import shutil as _shutil
 
-    from lyrics_extractor import vocal_sep
+    from lyrics_transcriber import vocal_sep
 
     tmp_dir = tmp_path / "vocals_tmp"
     tmp_dir.mkdir()
@@ -425,7 +425,7 @@ def test_vocal_separation_feeds_engine_and_cleans_up(audio, engines, monkeypatch
 
 
 def test_separation_skipped_when_unavailable(audio, engines, monkeypatch):
-    from lyrics_extractor import vocal_sep
+    from lyrics_transcriber import vocal_sep
 
     monkeypatch.setattr(vocal_sep, "is_available", lambda: False)
     ai_transcribe.transcribe_audio(
