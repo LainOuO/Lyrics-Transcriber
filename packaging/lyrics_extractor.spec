@@ -21,6 +21,13 @@ if importlib.util.find_spec("pykakasi"):
     datas += collect_data_files("pykakasi")
     hiddenimports = ["pykakasi"]
 
+# 增强包依赖绝不能进安装版（torch 一带就是 200MB+）。vocal_sep / whisper_local
+# 对它们是函数内懒加载，运行时检测不到就按「未安装增强包」自动跳过——所以
+# 打包时排除即可；但 PyInstaller 的静态分析会看见那些 import，只要这些库
+# 恰好装在本机（比如开发环境装了 demucs），不排除就会被打进去（实测 23MB
+# 的包涨到 254MB）。开发机装了增强包后重新打包，务必确认体积没暴涨。
+excludes = ["torch", "demucs", "soundfile"]
+
 a = Analysis(
     [os.path.join(ROOT, "lyrics_extractor", "__main__.py")],
     pathex=[ROOT],
@@ -29,7 +36,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
-    excludes=[],
+    excludes=excludes,
     noarchive=False,
 )
 pyz = PYZ(a.pure)
