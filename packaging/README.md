@@ -41,6 +41,9 @@ python -m PyInstaller --noconfirm --clean packaging\lyrics_extractor.spec --dist
 
 ## 注意事项
 
+- 应用图标是 `lyrics_extractor/assets/app.ico`：spec 里既把它塞进 exe（资源管理器/快捷方式显示），
+  又通过 `datas` 放进 `_internal/lyrics_extractor/assets/`（运行时窗口图标用）。
+  要换图标改 `packaging/make_icon.py` 后重跑一次即可（只有该脚本依赖 Pillow，程序本身不依赖）。
 - 发布新版本时，同步改 `installer.iss` 顶部的 `MyAppVersion` 和 `lyrics_extractor/__init__.py` 的 `__version__`。
 - `AppId` 是应用的唯一标识，保持不变才能"覆盖安装/升级"，不要改动。
 - 未做数字签名，首次运行/安装时 Windows SmartScreen 可能提示"未知发布者"，属正常现象；
