@@ -145,8 +145,15 @@ jobs:
             echo "歌词提取器 $GITHUB_REF_NAME：Windows / macOS / Linux 安装包见附件。" > /tmp/release-body.md
           fi
 
+      - name: 整理附件（摊平目录）
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f -exec cp {} release-assets/ \;
+          ls -la release-assets/
+
       - name: 创建 Release 并上传附件
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*
+          name: 歌词提取器 ${{ github.ref_name }}
+          files: release-assets/*
           body_path: /tmp/release-body.md

@@ -5,7 +5,7 @@ v0.6.0 起正式支持三大平台，每个版本的 Release 都会同时提供�
 ### 新增：macOS 与 Linux 支持
 
 - **macOS**：下载 `.dmg`，打开后把「LyricsTranscriber」拖进「应用程序」即可。
-  未做开发者签名与公证——首次打开若被 GateScreen 拦截，在「访达」里
+  未做开发者签名与公证——首次打开若被 Gatekeeper 拦截，在「访达」里
   **右键点程序图标 → 打开 → 再点打开**（或系统设置 → 隐私与安全性 → 仍要打开）
 - **Linux**：下载 `.AppImage`，赋予可执行权限后双击/终端运行：
   `chmod +x LyricsTranscriber-v0.6.0-Linux.AppImage && ./LyricsTranscriber-v0.6.0-Linux.AppImage`
