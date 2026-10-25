@@ -97,7 +97,8 @@ def test_ensure_ffmpeg_borrows_imageio(monkeypatch, tmp_path):
     )
     monkeypatch.setenv("PATH", r"C:\Windows\System32")
     whisper_local._ensure_ffmpeg()
-    shim = tmp_path / "bin" / "ffmpeg.exe"
+    # 垫片名按平台：Windows 是 ffmpeg.exe，macOS/Linux 是 ffmpeg
+    shim = tmp_path / "bin" / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
     # 复制成标准名、PATH 指向垫片目录（subprocess 按 "ffmpeg" 才解析得到）
     assert copied == [(str(fake_source), str(shim))]
     assert os.environ["PATH"].startswith(str(tmp_path / "bin"))
