@@ -3,7 +3,7 @@
 
 #define MyAppName "歌词提取器"
 #define MyAppNameEn "LyricsTranscriber"
-#define MyAppVersion "0.6.0"
+#define MyAppVersion "0.6.1"
 #define MyAppExeName "LyricsTranscriber.exe"
 #define MyAppPublisher "good"
 
