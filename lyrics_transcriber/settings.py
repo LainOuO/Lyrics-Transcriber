@@ -37,8 +37,10 @@ SETTINGS_PATH = SETTINGS_DIR / "settings.json"
 # 选阿里云百炼。硅基流动 2026 年已下架全部转写模型，不再可用。
 DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
 DEFAULT_MODEL = "whisper-large-v3-turbo"
-# 本机 whisper 型号：tiny / base / small / medium / large-v3
-DEFAULT_LOCAL_MODEL = "small"
+# 本机 whisper 型号：tiny / base / small / medium / large-v3。
+# 默认 base：实测（2026-10）small 在歌曲上比实时还慢且偶发复读幻觉，base 速度
+# 与质量平衡最好（整首约 40 秒，质量与云端 Paraformer 相当）
+DEFAULT_LOCAL_MODEL = "base"
 
 
 @dataclass

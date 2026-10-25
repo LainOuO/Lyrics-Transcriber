@@ -104,9 +104,13 @@ python -m lyrics_transcriber
 以下增强只对**源码方式运行**（`python -m lyrics_transcriber`）生效；安装版 exe
 为了控制体积没有打包这些 1GB 级依赖，只能用云端引擎。
 
-- **本机离线转写**：`pip install whisper-timestamped`（还需要本机装有 ffmpeg），
-  然后在「AI 设置」里把引擎切到「本机模型」。模型首次使用时自动下载并缓存，
-  之后断网也能转写。
+- **本机离线转写**：`pip install whisper-timestamped imageio-ffmpeg`，然后在
+  「AI 设置」里把引擎切到「本机模型」。ffmpeg 不必单独安装——PATH 里没有时
+  自动借用 imageio-ffmpeg 自带的静态版；模型首次使用自动下载缓存，之后断网
+  也能转写。实测（2026-10，本机 CPU）：**base** 型号转一首 5 分 40 秒的歌约
+  20 秒，覆盖到全曲人声段（03:33，好于云端原曲直转的 02:07），质量与云端
+  Paraformer 大体相当（各有各的听错处）；默认型号即 base。small 及以上在
+  歌曲上又慢（small 比实时还慢）且偶发复读幻觉，不推荐。
 - **人声分离**（背景音重的歌转写更准）：`pip install demucs`（自带 torch，
   1GB 级），并勾选「人声分离增强」。转写前先把人声从伴奏里剥出来；没装依赖
   自动跳过，不影响主流程；FLAC 等格式会自动先转 WAV，**不需要本机装 ffmpeg**。

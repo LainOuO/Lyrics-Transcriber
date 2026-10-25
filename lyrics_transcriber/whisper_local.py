@@ -1,12 +1,18 @@
-"""本地转写引擎（whisper-timestamped，可选依赖）：离线可用、词级时间戳。
+"""本地转写引擎（whisper-timestamped，可选依赖）：离线可用、逐字时间戳。
 
-依赖 ``whisper-timestamped``（连同 torch）与本机 PATH 里的 ffmpeg；未安装时
-给出明确的安装指引而不是一串 ImportError。模型首次使用时自动下载并缓存到
-用户目录，之后离线可用。
+依赖 ``whisper-timestamped``（连同 torch）。读音频要 ffmpeg：PATH 里有就用，
+没有就自动借用 ``imageio_ffmpeg`` 包自带的静态版（pip 装增强包时顺带装上即可，
+不必再单独安装系统 ffmpeg）。未安装时给出明确的安装指引而不是一串
+ImportError。模型首次使用时自动下载并缓存到用户目录，之后离线可用。
+
+实测注意（2026-10，本机 CPU）：whisper-timestamped 1.15.9 的词字段是 ``text``
+而不是 ``word``（每词 word=None），下面取词时两个字段名都认。
 """
 
 from __future__ import annotations
 
+import os
+import shutil
 from pathlib import Path
 
 from lyrics_transcriber.ai_transcribe import Transcription, TranscribeError, build_lines
@@ -16,6 +22,23 @@ from lyrics_transcriber.settings import Settings
 _MODELS: dict[str, object] = {}
 
 
+def _ensure_ffmpeg() -> None:
+    """whisper 靠 PATH 里的 ffmpeg 读音频；缺它时借 imageio_ffmpeg 的静态版。
+
+    imageio_ffmpeg 是纯 pip 包（自带 ffmpeg.exe），装增强包时顺带
+    ``pip install imageio-ffmpeg`` 即可，免去用户单独安装系统 ffmpeg。
+    """
+    if shutil.which("ffmpeg"):
+        return
+    try:
+        import imageio_ffmpeg
+
+        exe = Path(imageio_ffmpeg.get_ffmpeg_exe())
+        os.environ["PATH"] = str(exe.parent) + os.pathsep + os.environ.get("PATH", "")
+    except Exception:
+        pass  # 两边都没有时，让 whisper 在读音频处抛出带指引的 TranscribeError
+
+
 def transcribe_local(path, settings: Settings) -> Transcription:
     """用本机 whisper 模型转写；任何环境问题都转成带指引的 TranscribeError。"""
     try:
@@ -23,11 +46,12 @@ def transcribe_local(path, settings: Settings) -> Transcription:
     except Exception as exc:
         raise TranscribeError(
             "本机转写引擎未安装：请先在命令行执行 "
-            "pip install whisper-timestamped，并确认 ffmpeg 可用"
+            "pip install whisper-timestamped imageio-ffmpeg"
             "（详见 README 的「AI 增强包」一节）"
         ) from exc
 
-    name = str(getattr(settings, "local_model", "") or "small")
+    name = str(getattr(settings, "local_model", "") or "base")
+    _ensure_ffmpeg()
     try:
         model = _MODELS.get(name)
         if model is None:
@@ -41,7 +65,7 @@ def transcribe_local(path, settings: Settings) -> Transcription:
     for segment in result.get("segments", []):
         segment_words = [
             word for word in segment.get("words", [])
-            if str(word.get("word") or "").strip()
+            if str(word.get("word") or word.get("text") or "").strip()
         ]
         for index, word in enumerate(segment_words):
             entry = dict(word)
