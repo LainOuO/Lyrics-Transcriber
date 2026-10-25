@@ -74,21 +74,38 @@ def test_missing_engine_gives_install_guidance(monkeypatch):
     assert "pip install" in str(excinfo.value)
 
 
-def test_ensure_ffmpeg_borrows_imageio(monkeypatch):
-    """PATH 里没有 ffmpeg 时，自动把 imageio_ffmpeg 自带的静态版加进 PATH。"""
+def test_ensure_ffmpeg_borrows_imageio(monkeypatch, tmp_path):
+    """PATH 缺 ffmpeg 时借 imageio_ffmpeg 的静态版——但它的文件名不规则
+    （如 ffmpeg-win-x86_64-v7.1.exe），必须复制成标准名 subprocess 才找得到。"""
     monkeypatch.setattr(whisper_local.shutil, "which", lambda name: None)
+    monkeypatch.setattr(whisper_local, "_FFMPEG_SHIM_DIR", tmp_path / "bin")
 
-    fake_exe = Path(r"C:\fake\tools\ffmpeg.exe")
+    fake_source = tmp_path / "ffmpeg-win-x86_64-v7.1.exe"
+    fake_source.write_bytes(b"fake")
+    copied = []
 
     class FakeImageio:
         @staticmethod
         def get_ffmpeg_exe():
-            return str(fake_exe)
+            return str(fake_source)
 
     monkeypatch.setitem(sys.modules, "imageio_ffmpeg", FakeImageio)
+    real_copy2 = whisper_local.shutil.copy2
+    monkeypatch.setattr(
+        whisper_local.shutil, "copy2",
+        lambda src, dst: copied.append((str(src), str(dst))) or real_copy2(src, dst),
+    )
     monkeypatch.setenv("PATH", r"C:\Windows\System32")
     whisper_local._ensure_ffmpeg()
-    assert os.environ["PATH"].startswith(str(fake_exe.parent))
+    shim = tmp_path / "bin" / "ffmpeg.exe"
+    # 复制成标准名、PATH 指向垫片目录（subprocess 按 "ffmpeg" 才解析得到）
+    assert copied == [(str(fake_source), str(shim))]
+    assert os.environ["PATH"].startswith(str(tmp_path / "bin"))
+    # 已有垫片时不重复复制
+    copied.clear()
+    monkeypatch.setenv("PATH", r"C:\Windows\System32")
+    whisper_local._ensure_ffmpeg()
+    assert copied == []
 
 
 def test_ensure_ffmpeg_noop_when_present(monkeypatch):

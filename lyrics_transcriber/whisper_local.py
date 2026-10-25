@@ -22,21 +22,36 @@ from lyrics_transcriber.settings import Settings
 _MODELS: dict[str, object] = {}
 
 
+# ffmpeg 垫片目录：imageio_ffmpeg 的二进制文件名不规则（如 ffmpeg-win-x86_64-v7.1.exe），
+# subprocess 按 "ffmpeg" 找不到它——复制改名一份放这里（一次性 88MB），PATH 指向此目录
+_FFMPEG_SHIM_DIR = Path.home() / ".lyrics_transcriber" / "bin"
+
+
 def _ensure_ffmpeg() -> None:
     """whisper 靠 PATH 里的 ffmpeg 读音频；缺它时借 imageio_ffmpeg 的静态版。
 
-    imageio_ffmpeg 是纯 pip 包（自带 ffmpeg.exe），装增强包时顺带
+    imageio_ffmpeg 是纯 pip 包（自带 ffmpeg），装增强包时顺带
     ``pip install imageio-ffmpeg`` 即可，免去用户单独安装系统 ffmpeg。
+    它自带的二进制文件名不规则，subprocess 按 "ffmpeg" 调不到——复制成
+    标准名放进垫片目录，PATH 前置该目录。
     """
     if shutil.which("ffmpeg"):
         return
     try:
         import imageio_ffmpeg
 
-        exe = Path(imageio_ffmpeg.get_ffmpeg_exe())
-        os.environ["PATH"] = str(exe.parent) + os.pathsep + os.environ.get("PATH", "")
+        source = Path(imageio_ffmpeg.get_ffmpeg_exe())
     except Exception:
-        pass  # 两边都没有时，让 whisper 在读音频处抛出带指引的 TranscribeError
+        return  # 两边都没有时，让 whisper 在读音频处抛出带指引的 TranscribeError
+
+    shim = _FFMPEG_SHIM_DIR / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
+    try:
+        if not shim.exists():
+            _FFMPEG_SHIM_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, shim)
+    except OSError:
+        return
+    os.environ["PATH"] = str(_FFMPEG_SHIM_DIR) + os.pathsep + os.environ.get("PATH", "")
 
 
 def transcribe_local(path, settings: Settings) -> Transcription:
